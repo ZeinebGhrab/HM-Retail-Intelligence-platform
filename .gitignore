@@ -1,0 +1,37 @@
+# Secrets
+.env
+
+# Données volumineuses (versionnées via DVC, pas via git — voir ARCHITECTURE.md)
+data/raw/*
+data/processed/*
+data/features/*
+!data/raw/.gitkeep
+!data/processed/.gitkeep
+!data/features/.gitkeep
+intermediate/
+
+# Notebooks
+.ipynb_checkpoints/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Modèles entraînés / artefacts MLflow
+ml/models/*
+!ml/models/.gitkeep
+mlruns/
+
+# Node (frontend)
+node_modules/
+frontend/dist/
+frontend/build/
+
+# Docker
+*.log
+
+# OS
+.DS_Store
+Thumbs.db

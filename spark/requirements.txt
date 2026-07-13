@@ -1,0 +1,21 @@
+# Spark
+pyspark==3.5.1
+
+# Data
+pandas
+numpy
+pyarrow
+
+# Kafka
+confluent-kafka
+
+# PostgreSQL
+psycopg2-binary
+sqlalchemy
+
+# Config
+python-dotenv
+
+# Utils
+tabulate
+colorama
