@@ -93,6 +93,16 @@ services:
     networks:
       - shop_data_net
 
+  # Adminer : interface web légère pour administrer et visualiser la base de données via un navigateur
+  adminer:
+    image: adminer:latest
+    container_name: shop-adminer
+    restart: unless-stopped
+    ports:
+      - "8081:8080"
+    networks:
+      - shop_data_net
+
 # ============================================================
 # SPARK MASTER
 # ============================================================
@@ -107,8 +117,17 @@ services:
     hostname: spark-master
 
     command: >
-      /opt/spark/sbin/start-master.sh &&
-      tail -f /dev/null
+      /opt/spark/bin/spark-class org.apache.spark.deploy.master.Master
+    environment:
+
+      SPARK_MASTER_HOST: spark-master
+
+      SPARK_MASTER_PORT: 7077
+
+      SPARK_MASTER_WEBUI_PORT: 8080
+      
+    env_file:
+      - .env
 
     ports:
 
@@ -118,7 +137,7 @@ services:
 
     volumes:
 
-      - ./data:/data
+      - ./data:/opt/spark/work-dir/data
 
       - ./spark/jobs:/opt/spark/work-dir/jobs
 
@@ -148,10 +167,12 @@ services:
       - spark-master
 
     command: >
-      /opt/spark/sbin/start-worker.sh spark://spark-master:7077 &&
-      tail -f /dev/null
-
+      /opt/spark/bin/spark-class org.apache.spark.deploy.worker.Worker
+      spark://spark-master:7077
+    env_file:
+      - .env
     environment:
+      SPARK_MASTER_URL: spark://spark-master:7077
 
       SPARK_WORKER_MEMORY: 2G
 
@@ -159,11 +180,12 @@ services:
 
     volumes:
 
-      - ./data:/data
+      - ./data:/opt/spark/work-dir/data
 
       - ./spark/jobs:/opt/spark/work-dir/jobs
 
       - ./spark/utils:/opt/spark/work-dir/utils
+      # - ./.env:/opt/spark/work-dir/.env 
 
     networks:
       - shop_data_net
@@ -262,3 +284,5 @@ networks:
   shop_data_net:
 
     driver: bridge
+
+
