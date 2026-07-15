@@ -8,6 +8,10 @@ data/features/*
 !data/raw/.gitkeep
 !data/processed/.gitkeep
 !data/features/.gitkeep
+# Pointeurs DVC (doivent être versionnés dans Git, contrairement aux vraies données ci-dessus)
+!data/raw/*.dvc
+!data/processed/*.dvc
+!data/features/*.dvc
 intermediate/
 
 # Notebooks
