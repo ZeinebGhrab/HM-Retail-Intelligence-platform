@@ -34,7 +34,20 @@ import numpy as np
 import pandas as pd
 from fastapi import FastAPI, HTTPException
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+# On ajoute à la fois ml/ (pour "common") et ml/serving/ (pour "schemas") à sys.path,
+# car ce module est chargé de deux façons différentes selon le contexte :
+# - localement : `uvicorn ml.serving.app:app` depuis la racine du dépôt (uvicorn n'ajoute
+#   alors que la racine du dépôt à sys.path, pas ml/serving/) ;
+# - en conteneur : `uvicorn serving.app:app` avec WORKDIR=/opt/ml (uvicorn ajoute /opt/ml,
+#   pas /opt/ml/serving/).
+# Dans les deux cas, un simple "from common import ..." fonctionne (ml/ est bien ajouté),
+# mais "from schemas import ..." échoue sans l'ajout explicite de ce second répertoire.
+_THIS_DIR = Path(__file__).resolve().parent
+_ML_DIR = _THIS_DIR.parent
+for _p in (_ML_DIR, _THIS_DIR):
+    if str(_p) not in sys.path:
+        sys.path.insert(0, str(_p))
+
 from common import load_config, models_dir  # noqa: E402
 from schemas import (  # noqa: E402
     BehaviorFeatures,

@@ -307,6 +307,7 @@ services:
 
     build:
       context: ./ml
+      dockerfile: serving/Dockerfile
 
     container_name: shop-ml-serving
 

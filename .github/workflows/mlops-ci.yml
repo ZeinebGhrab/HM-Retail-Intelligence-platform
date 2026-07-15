@@ -62,7 +62,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Build image ml/serving
-        run: docker build -t hm-retail-ml-serving:${{ github.sha }} ml/
+        run: docker build -f ml/serving/Dockerfile -t hm-retail-ml-serving:${{ github.sha }} ml/
 
       # Publication vers un registre (GHCR, Docker Hub...) : à activer une
       # fois le registre cible choisi, avec les secrets correspondants.
