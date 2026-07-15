@@ -39,6 +39,7 @@ Thumbs.db
 # MLflow (tracking local / backend sqlite)
 mlflow.db
 mlflow_ci.db
+ml/mlflow_fallback.db
 mlflow_data/
 
 # Rapports de monitoring générés (Evidently)

@@ -12,6 +12,15 @@ Centralise :
 from __future__ import annotations
 
 import os
+
+# Timeout/retries HTTP MLflow réduits par défaut : sans cela, une URI MLflow injoignable
+# (ex. MLFLOW_TRACKING_URI absente, ou serveur pas démarré) fait attendre le client MLflow
+# plusieurs minutes (120s de timeout x 7 tentatives par défaut) avant d'échouer, ce qui bloque
+# `configure_mlflow()` bien avant que son repli automatique (voir plus bas) ne puisse agir.
+# `setdefault` : ne prime jamais sur une valeur explicitement définie par la personne.
+os.environ.setdefault("MLFLOW_HTTP_REQUEST_TIMEOUT", "5")
+os.environ.setdefault("MLFLOW_HTTP_REQUEST_MAX_RETRIES", "1")
+
 from pathlib import Path
 from typing import Any
 
@@ -31,16 +40,42 @@ def load_config(path: str | Path | None = None) -> dict[str, Any]:
 
 
 def get_mlflow_tracking_uri(config: dict[str, Any]) -> str:
-    """La variable d'env MLFLOW_TRACKING_URI (définie dans .env) prime sur le config.yaml."""
-    return os.environ.get("MLFLOW_TRACKING_URI", config["mlflow"]["tracking_uri"])
+    """La variable d'env MLFLOW_TRACKING_URI (définie dans .env) prime sur le config.yaml.
+
+    Utilise `or` plutôt que `os.environ.get(clé, défaut)` : dans GitHub Actions, un secret non
+    configuré (ex. MLFLOW_TRACKING_URI absent des secrets du repo) résout `${{ secrets.X }}` en
+    chaîne VIDE, mais la variable d'environnement reste tout de même définie (juste vide) — donc
+    `os.environ.get("MLFLOW_TRACKING_URI", défaut)` renverrait cette chaîne vide au lieu du défaut,
+    et MLflow interpréterait une URI vide comme un stockage fichier local ("./mlruns"), désormais
+    bloqué ("filesystem tracking backend ... in maintenance mode"). `or` ignore aussi bien
+    l'absence que la chaîne vide.
+    """
+    return os.environ.get("MLFLOW_TRACKING_URI") or config["mlflow"]["tracking_uri"]
 
 
 def configure_mlflow(config: dict[str, Any]):
-    """Configure mlflow (tracking URI + expérience) et retourne le module prêt à l'emploi."""
+    """Configure mlflow (tracking URI + expérience) et retourne le module prêt à l'emploi.
+
+    Ne fait jamais planter l'entraînement : si l'URI configurée (secret manquant, serveur MLflow
+    non démarré, backend fichier obsolète...) est injoignable ou invalide, bascule automatiquement
+    sur un tracking local SQLite (`ml/mlflow_fallback.db`) avec un WARNING explicite, plutôt que de
+    lever une exception qui interromprait tout le script avant même l'entraînement du modèle.
+    """
     import mlflow
 
-    mlflow.set_tracking_uri(get_mlflow_tracking_uri(config))
-    mlflow.set_experiment(config["mlflow"]["experiment_name"])
+    uri = get_mlflow_tracking_uri(config)
+    mlflow.set_tracking_uri(uri)
+    try:
+        mlflow.set_experiment(config["mlflow"]["experiment_name"])
+    except Exception as e:
+        fallback_uri = f"sqlite:///{ML_DIR / 'mlflow_fallback.db'}"
+        print(
+            f"[WARN] Tracking MLflow '{uri}' injoignable ou incompatible ({e}). "
+            f"Repli sur un tracking local : {fallback_uri} "
+            "(les runs ne seront visibles que sur cette machine)."
+        )
+        mlflow.set_tracking_uri(fallback_uri)
+        mlflow.set_experiment(config["mlflow"]["experiment_name"])
     return mlflow
 
 
