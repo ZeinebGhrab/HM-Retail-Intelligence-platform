@@ -171,6 +171,24 @@ docker exec shop-spark-worker \
 
 À la fin de l'exécution, les 8 tables sont disponibles dans PostgreSQL : `dim_customer`, `dim_article`, `dim_date`, `fact_transaction`, `customers_features_train`, `products_performance`, `daily_sales`, `customer_segments_summary`.
 
+### 9.1 Consulter l'UI Spark Master
+
+| URL | Description |
+|---|---|
+| `http://localhost:8080` | UI web du Spark Master (`SPARK_MASTER_WEBUI_PORT`, voir `.env`) — liste des workers connectés, jobs en cours (`Running Applications`) et terminés, logs par exécuteur. |
+| `spark://spark-master:7077` | Port du protocole Spark lui-même (`SPARK_MASTER_PORT`) — **pas** une URL de navigateur, utilisée uniquement par `spark-submit` et les workers pour se connecter au cluster. |
+
+Le job soumis apparaît dans la liste `Running Applications` de l'UI dès son lancement, puis passe dans `Completed Applications` une fois terminé.
+
+### 9.2 Dépannage courant (Docker Desktop / Windows)
+
+| Symptôme | Cause | Solution |
+|---|---|---|
+| `container ... is not running` sur `docker exec shop-spark-worker ...` | `spark-worker` (et/ou `spark-master`) arrêté entre deux sessions Docker Desktop | `docker compose up -d spark-master spark-worker` (ou `docker compose up -d` pour tout redémarrer d'un coup) |
+| `Bind for 0.0.0.0:XXXX failed: port is already allocated` | Un port du projet (ex. `6333`, `8080`) est déjà utilisé par un **autre** projet Docker actif sur la machine | `docker ps` pour identifier le conteneur concurrent, puis `docker stop <nom>` — ou changer le port en conflit dans `.env` |
+| `UnknownHostException: spark-master: ... Temporary failure in name resolution` dans `docker logs shop-spark-master` | Le DNS interne de Docker (résolution des noms de service, ex. `spark-master`) est dans un état incohérent — fréquent après beaucoup de conteneurs/réseaux actifs simultanément | `docker compose down` (supprime le réseau `shop_data_net`) → `wsl --shutdown` (PowerShell admin) → rouvrir Docker Desktop → `docker compose up -d` |
+| `localhost:8080` inaccessible alors que `docker ps` montre `shop-spark-master` comme `Up` | Un **autre** projet Docker utilise déjà le port 8080 (ex. phpMyAdmin d'un autre projet) | Vérifier `docker ps` pour repérer le conteneur qui occupe réellement le port, l'arrêter, puis relancer `spark-master` |
+
 ---
 
 ## 10. Visualiser le Data Warehouse via Adminer
@@ -223,8 +241,3 @@ Accès : `http://localhost:8081`, puis connexion avec :
 
 `Window.orderBy("total_spend")` + `ntile(4)` nécessite un tri global de toute la colonne sur **une seule partition** (`WARN WindowExec: No Partition Defined`), ce qui a fait passer le job de quelques secondes à plus de 30 minutes sur 1,36M clients. `approxQuantile` calcule les seuils (25e/50e/75e percentile) de façon distribuée, sans ce goulot d'étranglement. Conséquence : les 4 segments ne sont plus garantis à effectifs strictement égaux (ce que faisait `ntile`), mais reflètent des **seuils de dépense réels** — plus cohérent pour une segmentation marketing, et plus rapide.
 
----
-
-## 13. Pour aller plus loin
-
-Une documentation détaillée est disponible dans le PDF joint : **`Pipeline_HM_Spark_PostgreSQL_DataWarehouse.pdf`**.
