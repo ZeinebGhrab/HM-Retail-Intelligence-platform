@@ -1,0 +1,4 @@
+['remote "dagshub"']
+    auth = basic
+    user = ZeinebGhrab
+    password = 4d351cbf50a9e5d57a9886c3ec562e69af55006e

@@ -97,11 +97,21 @@ jobs:
       - name: Installer les dépendances
         run: pip install -r ml/requirements.txt
 
-      - name: Récupérer les CSV bruts versionnés (DVC, optionnel)
-        run: dvc pull
+      - name: Configurer l'authentification DagsHub pour le remote DVC
+        # .dvc/config déclare le remote "dagshub" mais pas ses identifiants (config.local
+        # n'est jamais commité, voir ml/MLOPS_GUIDE.md §8) : sans cette étape, DAGSHUB_USER/
+        # DAGSHUB_TOKEN ne sont jamais réellement utilisés par `dvc pull` ci-dessous.
+        run: |
+          dvc remote modify dagshub --local auth basic
+          dvc remote modify dagshub --local user "$DAGSHUB_USER"
+          dvc remote modify dagshub --local password "$DAGSHUB_TOKEN"
         env:
           DAGSHUB_USER: ${{ secrets.DAGSHUB_USER }}
           DAGSHUB_TOKEN: ${{ secrets.DAGSHUB_TOKEN }}
+        continue-on-error: true # tant que les secrets DagsHub ne sont pas encore configurés sur le repo
+
+      - name: Récupérer les CSV bruts versionnés (DVC, optionnel)
+        run: dvc pull
         continue-on-error: true # tant que le remote DVC réel n'est pas configuré (secrets absents)
 
       - name: Rapport de dérive (Evidently, lit customers_features_train)
