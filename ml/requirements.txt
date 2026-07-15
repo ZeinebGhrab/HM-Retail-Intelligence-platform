@@ -1,0 +1,27 @@
+# Data / ML
+pandas>=2.2
+numpy>=1.26
+scikit-learn>=1.5
+xgboost>=2.0
+imbalanced-learn>=0.12
+joblib>=1.4
+pyyaml>=6.0
+
+# PostgreSQL (lecture de la table customers_features_train, cf. ml/common.py)
+sqlalchemy>=2.0
+psycopg2-binary>=2.9
+
+# MLOps
+mlflow>=2.16
+dvc>=3.50
+evidently>=0.4,<0.5
+
+# Serving
+fastapi>=0.112
+uvicorn[standard]>=0.30
+pydantic>=2.8
+
+# Tests / CI
+pytest>=8.0
+httpx>=0.27
+ruff>=0.6

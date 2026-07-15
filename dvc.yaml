@@ -1,0 +1,60 @@
+# Pipeline DVC — versionne le code/dépendances des étapes ML pour un
+# ré-entraînement reproductible (`dvc repro`).
+#
+# Important : contrairement à un pipeline "tout fichier", la source des
+# features (`customers_features_train`) est une table PostgreSQL produite par
+# spark/jobs/pipeline_hm.py — pas un fichier. DVC ne peut pas suivre une table
+# de base de données comme dépendance. Les étapes ci-dessous déclarent donc
+# comme dépendances le CODE qui détermine le résultat (scripts, config), pas
+# la donnée elle-même : `dvc repro` rejoue un entraînement si le CODE change,
+# mais ne détecte pas un changement de contenu de la table Postgres (ex.
+# nouvelle exécution du pipeline Spark avec des données Kaggle mises à jour).
+# Pour forcer un ré-entraînement après une nouvelle exécution du pipeline
+# Spark, utiliser `dvc repro --force`, ou déclencher les stages `train_*`
+# explicitement depuis n8n/GitHub Actions après le job Spark (voir
+# ml/MLOPS_GUIDE.md §2 et §7).
+#
+# Pré-requis : `dvc init` (une fois, à la racine du dépôt — déjà fait dans ce
+# dépôt, voir .dvc/), un remote DVC configuré (ex. DagsHub, cf.
+# ml/MLOPS_GUIDE.md §2), puis `dvc add data/raw/*.csv` pour versionner les CSV
+# Kaggle bruts consommés par spark/jobs/pipeline_hm.py.
+
+stages:
+  train_classification:
+    cmd: python ml/training/train_classification.py --register
+    deps:
+      - ml/training/train_classification.py
+      - ml/common.py
+      - ml/config.yaml
+    outs:
+      - ml/models/classification:
+          cache: false   # les modèles "source de vérité" restent dans MLflow Model Registry
+
+  train_regression:
+    cmd: python ml/training/train_regression.py --register
+    deps:
+      - ml/training/train_regression.py
+      - ml/common.py
+      - ml/config.yaml
+    outs:
+      - ml/models/regression:
+          cache: false
+
+  train_clustering:
+    cmd: python ml/training/train_clustering.py --register
+    deps:
+      - ml/training/train_clustering.py
+      - ml/common.py
+      - ml/config.yaml
+    outs:
+      - ml/models/clustering:
+          cache: false
+
+  drift_report:
+    cmd: python ml/monitoring/drift_report.py --output ml/monitoring/reports/drift_report.html
+    deps:
+      - ml/monitoring/drift_report.py
+      - ml/common.py
+    outs:
+      - ml/monitoring/reports/drift_report.html:
+          cache: false

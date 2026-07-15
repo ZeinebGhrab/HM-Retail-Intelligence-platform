@@ -10,6 +10,7 @@ IF "%CMD%"=="all" GOTO ALL
 IF "%CMD%"=="kafka" GOTO KAFKA
 IF "%CMD%"=="spark" GOTO SPARK
 IF "%CMD%"=="infra" GOTO INFRA
+IF "%CMD%"=="ml" GOTO ML
 IF "%CMD%"=="logs" GOTO LOGS
 IF "%CMD%"=="status" GOTO STATUS
 IF "%CMD%"=="down" GOTO DOWN
@@ -39,7 +40,16 @@ GOTO END
 
 :INFRA
 
-docker compose up -d kafka zookeeper postgres  qdrant n8n
+docker compose up -d kafka zookeeper postgres adminer qdrant n8n mlflow
+
+GOTO END
+
+
+
+
+:ML
+
+docker compose up -d mlflow ml-serving
 
 GOTO END
 

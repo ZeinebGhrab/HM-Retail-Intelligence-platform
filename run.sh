@@ -12,7 +12,10 @@ case "$CMD" in
     docker compose up -d
     ;;
   infra)
-    docker compose up -d kafka zookeeper postgres qdrant n8n
+    docker compose up -d kafka zookeeper postgres adminer qdrant n8n mlflow
+    ;;
+  ml)
+    docker compose up -d mlflow ml-serving
     ;;
   kafka)
     docker compose up -d kafka zookeeper
@@ -34,7 +37,7 @@ case "$CMD" in
     ;;
   *)
     echo "Commande inconnue : $CMD"
-    echo "Usage : ./run.sh [all|infra|kafka|spark|logs|status|down|clean]"
+    echo "Usage : ./run.sh [all|infra|ml|kafka|spark|logs|status|down|clean]"
     exit 1
     ;;
 esac

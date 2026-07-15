@@ -1,0 +1,104 @@
+# =============================================================================
+# Configuration centrale du volet ML de la plateforme H&M Retail Intelligence.
+#
+# Source des features : table PostgreSQL `customers_features_train`, produite
+# par spark/jobs/pipeline_hm.py (voir spark/README.md §4.4 et §6-7). Ce n'est
+# PAS un fichier CSV dans data/features/ : ce dossier n'est plus alimenté par
+# le pipeline actif (l'ancienne écriture Parquet a été retirée, voir le code
+# commenté en tête de pipeline_hm.py) — la table Postgres est la seule source
+# de vérité pour les features clients.
+# =============================================================================
+
+postgres:
+  # Hôte surchargé par la variable d'env POSTGRES_HOST : "postgres" (nom du
+  # service Docker) depuis un conteneur du réseau shop_data_net, "localhost"
+  # depuis un poste de dev (le port est publié par docker-compose.yml).
+  host_default: "localhost"
+  port_env: POSTGRES_PORT
+  db_env: POSTGRES_DB
+  user_env: POSTGRES_USER
+  password_env: POSTGRES_PASSWORD
+  # Table produite par compute_customer_features() + le job pipeline_hm.py
+  # (section "STOCKAGE" -> customers_features_train_wh). Colonnes : customer_key,
+  # total_spend, n_transactions, first_purchase, last_purchase,
+  # n_distinct_categories, recency_days, tenure_days, avg_basket_value,
+  # purchase_frequency_per_month, segment_valeur, age, age_group,
+  # club_member_status, fashion_news_frequency, postal_code.
+  features_table: customers_features_train
+
+data:
+  test_size: 0.2
+  random_state: 42
+
+# Features comportementales communes (clustering + classification), reprises
+# du notebook 05 ("behavior_features") — toutes présentes dans la table Postgres.
+behavior_features:
+  - age
+  - n_transactions
+  - tenure_days
+  - n_distinct_categories
+  - avg_basket_value
+  - purchase_frequency_per_month
+  - recency_days
+
+# Bins exacts de age_group, IDENTIQUES entre spark/utils/cleaning.py (clean_customers)
+# et le notebook 01 — utilisés uniquement par le générateur de données synthétiques de
+# repli (ml/common.py) pour rester cohérent avec le vrai schéma de la table Postgres.
+age_group_bins: [16, 20, 25, 30, 35, 40, 50, 60, 70, 100]
+age_group_labels: ["16-19", "20-24", "25-29", "30-34", "35-39", "40-49", "50-59", "60-69", "70+"]
+
+classification:
+  target: club_member_status
+  model_name: hm-club-status-classifier
+  # Modèle retenu dans le notebook (section 17.5.1, confirmé synthèse §17.8) :
+  # Random Forest optimisé par GridSearchCV, F1-macro=0.3889 (test) — bat tous
+  # les modèles de boosting testés avec SMOTE/rééquilibrage (17.5.2), dont le
+  # meilleur (CatBoost+SMOTE) plafonne à F1-macro=0.3652. Pas de SMOTE dans le
+  # modèle final retenu : seul class_weight='balanced' est utilisé.
+  hyperparameters:
+    n_estimators: 200
+    max_depth: 20
+    min_samples_leaf: 5      # best_params_ exact de GridSearchCV (cf. cellule 25 du notebook 06)
+    class_weight: balanced
+
+regression:
+  target: total_spend
+  model_name: hm-spend-regressor
+  # Modèle retenu (section 17.6.4, confirmé synthèse §17.8) : XGBoost Regressor
+  # à hyperparamètres par défaut (xgb.XGBRegressor(random_state=42), sans
+  # réglage additionnel), R²(test, log)=0.943 — devant Lasso/Ridge/ElasticNet
+  # (R²≈0.89) et la régression linéaire simple.
+  log_target: true             # np.log1p(total_spend)
+  numeric_features:
+    - age
+    - n_transactions
+    - tenure_days
+    - n_distinct_categories
+    - purchase_frequency_per_month
+    - recency_days
+  categorical_features:
+    - club_member_status
+    - fashion_news_frequency
+    - age_group
+  # Sélection de features : SelectKBest(f_regression, k=12) sur l'ensemble
+  # numérique+catégoriel one-hot (section 17.6.2), retenue plutôt que la
+  # Backward Elimination (section 17.6.3, qui sert de validation croisée
+  # complémentaire mais n'est pas utilisée pour le modèle final).
+  select_k_best: 12
+
+clustering:
+  model_name: hm-customer-segmentation
+  algorithm: kmeans
+  k: 6            # k=6 validé par silhouette en notebook 07 (17.7.2)
+  n_init: 10
+
+mlflow:
+  # Surchargé par la variable d'env MLFLOW_TRACKING_URI si définie (voir .env.example).
+  tracking_uri: "http://localhost:5000"
+  experiment_name: "hm-retail-intelligence"
+  registry_stage_on_promote: "Production"
+
+monitoring:
+  reference_sample_size: 5000
+  current_sample_size: 5000
+  drift_share_threshold: 0.5   # part de colonnes en drift au-delà de laquelle on alerte

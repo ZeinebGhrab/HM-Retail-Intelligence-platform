@@ -269,6 +269,78 @@ services:
     networks:
       - shop_data_net
 
+# ============================================================
+# MLFLOW (tracking d'expériences + Model Registry)
+# ============================================================
+
+  mlflow:
+
+    image: ghcr.io/mlflow/mlflow:v2.16.2
+
+    container_name: shop-mlflow
+
+    restart: unless-stopped
+
+    command: >
+      mlflow server
+      --backend-store-uri sqlite:///mlflow/mlflow.db
+      --default-artifact-root /mlflow/artifacts
+      --host 0.0.0.0
+      --port 5000
+
+    ports:
+
+      - "${MLFLOW_PORT}:5000"
+
+    volumes:
+
+      - mlflow_data:/mlflow
+
+    networks:
+      - shop_data_net
+
+# ============================================================
+# ML SERVING (API d'inférence FastAPI — voir ml/serving/ et ml/MLOPS_GUIDE.md)
+# ============================================================
+
+  ml-serving:
+
+    build:
+      context: ./ml
+
+    container_name: shop-ml-serving
+
+    restart: unless-stopped
+
+    depends_on:
+      - mlflow
+      - postgres
+
+    ports:
+
+      - "${ML_SERVING_PORT}:8500"
+
+    environment:
+
+      MLFLOW_TRACKING_URI: http://mlflow:5000
+
+      POSTGRES_HOST: postgres
+
+      POSTGRES_PORT: 5432
+
+      POSTGRES_DB: ${POSTGRES_DB}
+
+      POSTGRES_USER: ${POSTGRES_USER}
+
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+
+    volumes:
+
+      - ./ml/models:/opt/ml/models
+
+    networks:
+      - shop_data_net
+
 volumes:
 
   postgres_data:
@@ -279,10 +351,10 @@ volumes:
 
   qdrant_data:
 
+  mlflow_data:
+
 networks:
 
   shop_data_net:
 
     driver: bridge
-
-

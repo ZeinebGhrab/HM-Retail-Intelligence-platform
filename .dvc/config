@@ -1,0 +1,9 @@
+[core]
+    remote = dagshub
+    autostage = true
+
+# Remote DagsHub (Git + DVC + tracking d'expériences combinés, cf. MLOPS_GUIDE.md §2).
+# L'URL exacte est à adapter au dépôt DagsHub du projet une fois créé
+# (Settings > Remote > DVC sur DagsHub donne l'URL et la commande complètes).
+['remote "dagshub"']
+    url = https://dagshub.com/<user>/HM-Retail-Intelligence-platform.dvc

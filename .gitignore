@@ -35,3 +35,16 @@ frontend/build/
 # OS
 .DS_Store
 Thumbs.db
+
+# MLflow (tracking local / backend sqlite)
+mlflow.db
+mlflow_ci.db
+mlflow_data/
+
+# Rapports de monitoring générés (Evidently)
+ml/monitoring/reports/*.html
+!ml/monitoring/reports/.gitkeep
+
+# DVC
+/.dvc/cache
+/.dvc/tmp
