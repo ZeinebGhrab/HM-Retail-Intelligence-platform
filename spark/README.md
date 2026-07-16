@@ -1,243 +1,221 @@
-# Pipeline Big Data H&M — Spark, PostgreSQL & Data Warehouse
+# HM Retail Intelligence Platform
 
-Pipeline de données batch qui transforme les fichiers CSV bruts du dataset **H&M (Kaggle)** en un **Data Warehouse PostgreSQL** structuré (schéma en étoile) et en **Data Marts** prêts à l'emploi pour le Machine Learning, un dashboard et un système RAG / LLM.
+Plateforme de données pour le projet H&M : ingestion, nettoyage, feature engineering et stockage, avec deux modes de traitement complémentaires — **batch** (historique) et **streaming** (temps réel simulé) — réunis dans un seul Data Warehouse et exploités par une API de prédiction.
 
-Le tout tourne dans **Docker Compose**, avec **Apache Spark** comme moteur de traitement et **PostgreSQL** comme base de stockage finale, reliés via le protocole **JDBC**.
+Vue d'ensemble du cycle complet, orchestré par n8n :
+
+```
+Kafka (temps réel) ──► Spark Streaming ──► stream_transactions_ingested
+                                                     │
+                                    toutes les 15 min │ merge_stream_to_warehouse.py
+                                                     ▼
+                                            fact_transaction (Data Warehouse)
+                                                     │
+                                     chaque nuit 02h00 │ pipeline_hm.py --source=warehouse
+                                                     ▼
+                                        Data Marts (RFM, popularité produit, ...)
+                                                     │
+                                                     ▼
+                                              API modèle (prédiction)
+```
+
+Ce README donne la vue d'ensemble du projet. Pour le détail technique du pipeline streaming (Dockerfile, docker-compose, méthodes de chaque fichier), voir [`spark/streaming_pipeline/README.md`](./spark/streaming_pipeline/README.md). Pour le détail de l'orchestration n8n (fusion périodique, recalcul RFM nocturne, appel du modèle), voir la [section 7](#7-orchestration-n8n--cycle-complet).
 
 ---
 
-## 1. Vue d'ensemble du flux
+## Arborescence du projet
 
 ```
-CSV (Kaggle H&M)
-      │
-      ▼
-Apache Spark  ──────►  Driver JDBC PostgreSQL
-      │                        │
-      ▼                        ▼
-Nettoyage + Features   ──►  PostgreSQL (Data Warehouse)
-      │                        │
-      ▼                        ▼
-Star Schema            Data Marts (ML · Dashboard · RAG)
+HM-Retail-Intelligence-Platform/
+├── data/
+│   └── raw/
+│       ├── customers.csv
+│       ├── articles.csv
+│       ├── transactions_train.csv          ← historique (batch)
+│       └── daily/                          ← simulateur de flux réel
+│           ├── transactions_2026-07-08.csv
+│           ├── transactions_2026-07-09.csv
+│           └── transactions_2026-07-10.csv
+├── kafka/
+│   ├── producers/
+│   │   ├── transactions_producer.py
+│   │   └── producer_api.py
+│   └── consumers/
+├── spark/
+│   ├── common/
+│   │   ├── config.py
+│   │   └── schemas.py
+│   ├── batch_ml_pipeline/
+│   │   ├── jobs/
+│   │   │   ├── pipeline_hm.py
+│   │   │   └── merge_stream_to_warehouse.py   ← fusion streaming → Data Warehouse (nouveau)
+│   │   └── utils/
+│   │       ├── cleaning.py
+│   │       └── features.py
+│   ├── streaming_pipeline/
+│   │   ├── jobs/
+│   │   │   └── streaming_job.py
+│   │   └── utils/
+│   │       ├── cleaning.py
+│   │       └── validation.py
+│   ├── job_trigger_api.py                     ← déclenche les jobs Spark pour n8n (nouveau)
+│   └── job_trigger.Dockerfile
+├── model_api/                                  ← API de prédiction (nouveau)
+│   └── app.py
+├── Dockerfile
+├── docker-compose.yml
+└── .env
 ```
 
 ---
 
-## 2. Pourquoi Spark écrit dans PostgreSQL via JDBC (et pas psycopg2) ?
+## 1. Le dossier `data/`
 
-- `psycopg2` (présent dans `requirements.txt`) n'est utilisé que par du code **Python pur**.
-- **Spark tourne sur la JVM (Java)** — il ne connaît pas `psycopg2`.
-- Quand le code appelle `df.write.jdbc(...)`, c'est **Spark (Java)** qui écrit dans PostgreSQL, pas Python. Il lui faut donc un **driver Java JDBC**.
+Contient toutes les données du projet, en deux catégories bien séparées :
 
-```
-Script PySpark → Spark DataFrame API → Spark Engine (Java) → Driver JDBC PostgreSQL → PostgreSQL
-```
+| Sous-dossier | Contenu | Utilisé par |
+|---|---|---|
+| `data/raw/` (fichiers racine) | Le dataset Kaggle H&M complet et figé (`customers.csv`, `articles.csv`, `transactions_train.csv`, 33,7M lignes) | `batch_ml_pipeline` |
+| `data/raw/daily/` | Des fichiers CSV **générés artificiellement**, un par jour (`transactions_2026-07-08.csv`, etc.), pour simuler l'arrivée réelle de nouvelles transactions | `kafka/producers` (rejoués vers Kafka) |
 
----
-
-## 3. Configuration partagée : le fichier `.env`
-
-```
-POSTGRES_PORT=5432
-POSTGRES_DB=hm_retail
-POSTGRES_USER=hm_admin
-POSTGRES_PASSWORD=change_me
-```
-
-Le conteneur Spark ne connaît ces variables que si `.env` est monté ou déclaré en `env_file` sur **tous** les services Spark (`spark-master` **et** `spark-worker`) — pas seulement sur `postgres`.
+`daily/` n'est pas une copie du dataset historique : c'est un **simulateur**. Chaque fichier représente ce qu'un jour de production enverrait réellement, rejoué message par message vers Kafka par le producer — voir plus bas.
 
 ---
 
-## 4. Structure du projet et rôle de chaque fichier
+## 2. Le dossier `kafka/`
 
 | Fichier | Rôle |
 |---|---|
-| `config.py` | Centralise la création de la `SparkSession` (`get_spark_session()`) et la configuration de connexion JDBC (`get_jdbc_config()`). |
-| `schemas.py` | Définit explicitement le schéma (types de colonnes) des fichiers CSV `transactions`, `customers`, `articles` — pas de nettoyage ici. |
-| `cleaning.py` | Reproduit le nettoyage réalisé dans le notebook d'EDA : imputation, conversion de dates, création de tranches d'âge. |
-| `features.py` | Calcule les features RFM et enrichies par client, construit les tables d'agrégation métier, puis le Data Warehouse (dimensions + faits) et les Data Marts. |
+| `producers/transactions_producer.py` | Lit un fichier `daily/transactions_<date>.csv` et publie chaque ligne comme message JSON sur le topic Kafka `transactions.raw`, avec un léger délai entre chaque message pour simuler un flux réel (pas un déversement instantané). |
+| `producers/producer_api.py` | Petit serveur HTTP (FastAPI) qui expose `POST /produce?date=...` — c'est le point d'entrée que n8n appelle pour déclencher le producer, car n8n ne peut pas exécuter un script Python directement. |
 
-### 4.1 `config.py`
 
-`get_spark_session()` crée la `SparkSession`, la nomme (`appName("hm_pipeline")`), pointe vers le cluster (`master("spark://spark-master:7077")`) et charge le driver JDBC. `get_jdbc_config()` retourne l'URL JDBC et les identifiants, pour éviter de les répéter dans chaque script.
+---
 
-> **Spark Master vs Spark Worker, en bref** : le **Master** coordonne le cluster (il reçoit les jobs soumis, connaît la liste des workers disponibles, répartit le travail) — il n'exécute aucun calcul lui-même. Le **Worker** exécute réellement les tâches (lecture des CSV, jointures, agrégations) avec les ressources qu'il a déclarées au Master. `spark-submit` peut être lancé depuis n'importe quel conteneur ayant accès réseau au Master et aux fichiers du job — y compris depuis le conteneur `spark-worker` lui-même (voir section 9).
+## 3. Le dossier `spark/`
 
-### 4.2 `schemas.py`
+Contient trois sous-dossiers (une responsabilité distincte chacun) et un service d'orchestration :
 
-Définit un schéma explicite (`StructType`) plutôt que `inferSchema=True`, pour des raisons de performance, de fiabilité des types et de reproductibilité. Toutes les colonnes du fichier `customers.csv` sont lues, **y compris `FN` et `Active`**, avec leur type d'origine.
+### 3.1 `spark/common/`
 
-### 4.3 `cleaning.py`
+Code **partagé** entre le pipeline batch et le pipeline streaming, pour éviter la duplication :
 
-| Fonction | Traitement |
+| Fichier | Rôle |
 |---|---|
-| `clean_customers()` | Supprime explicitement `FN` et `Active` (`.drop("FN", "Active")`) — un `NaN` sur ces colonnes signifie une absence réelle d'abonnement selon l'EDA, pas une valeur à imputer. Âge imputé par la **médiane** (`approxQuantile`) ; statut club et fréquence newsletter imputés par le **mode** ; création de tranches d'âge (`age_group`). |
-| `clean_articles()` | Aucune imputation (0,4 % de valeurs manquantes sur `detail_desc`, jugé négligeable). |
-| `clean_transactions()` | Conversion de `t_dat` en type `Date`, aucun filtre ni dédoublonnage. |
+| `config.py` | Crée la `SparkSession` (`get_spark_session()`), la configuration JDBC vers PostgreSQL (`get_jdbc_config()`), et la configuration Kafka (`get_kafka_config()`). |
+| `schemas.py` | Définit les schémas Spark (`StructType`) des 3 fichiers sources : `transactions_schema`, `customers_schema`, `articles_schema`. Identiques pour le batch et le streaming — un seul endroit à modifier si le format des données change. |
 
-Faire ce tri dans `cleaning.py` plutôt qu'à la lecture (`schemas.py`) rend la décision de nettoyage explicite et traçable, au bon endroit du pipeline.
+### 3.2 `spark/batch_ml_pipeline/`
 
-### 4.4 `features.py`
+Le pipeline historique, avec **deux jobs** distincts :
 
-**Features RFM par client** : `total_spend` (Monetary), `n_transactions` (Frequency), `recency_days` depuis `DATASET_END = "2020-09-22"` (date fixe, dataset historique) (Recency), `tenure_days`, `avg_basket_value`, `purchase_frequency_per_month`, `n_distinct_categories`.
-
-`segment_valeur` : segmentation en quartiles de `total_spend` via **`approxQuantile`**  — voir section 12 pour le détail du changement par rapport à `ntile()`.
-
----
-
-## 5. Le Data Warehouse — schéma en étoile
-
-```
-              Dim Customer
-                    │
-Dim Date ─── Fact Transaction ─── Dim Article
-```
-
-| Table | Contenu |
-|---|---|
-| `dim_customer` | Infos descriptives client ; `customer_key` généré par hash `crc32`. |
-| `dim_article` | Infos descriptives produit ; `article_key = article_id` (déjà un entier unique). |
-| `dim_date` | Une ligne par date distincte, avec `date_key` lisible (`2020-09-22 → 20200922`). |
-| `fact_transaction` | Une ligne par achat : clés vers les dimensions + mesures (`price`, `sales_channel_id`). |
-
----
-
-## 6. Position des Data Marts dans le schéma en étoile
-
-Le schéma en étoile classique a deux niveaux : les dimensions et le fait, au grain le plus fin. Les Data Marts forment un **troisième niveau** : des agrégats précalculés, un cran au-dessus du fait.
-
-**Cœur classique — grain fin (1 ligne = 1 transaction)** : `dim_customer`, `dim_article`, `dim_date`, `fact_transaction`.
-
-**Data Marts — grain agrégé** :
-- `customers_features_train` — 1 ligne = 1 client
-- `products_performance` — 1 ligne = 1 article
-- `daily_sales` — 1 ligne = 1 jour
-- `customer_segments_summary` — 1 ligne = 1 segment
-
-Les marts sont calculés à partir de `fact_transaction`, puis stockés à côté, dans la même base — ils ne remplacent ni les dimensions ni le fait.
-
-### À quoi servent vraiment les Data Marts ?
-
-Sans mart, chaque question métier obligerait à scanner et recalculer sur 33,7 millions de lignes à chaque appel.
-
-| Sans Data Mart | Avec Data Mart |
-|---|---|
-| Scanner 33,7M lignes à chaque requête | Lire 1 ligne déjà prête dans le mart |
-| Refaire un `groupBy` + agrégation à chaque appel | Aucun recalcul, donnée déjà résumée |
-| Chaque équipe réécrit sa propre requête | Une seule table de référence, partagée |
-
-Au lieu que Django ou l'équipe ML recalcule le RFM en scannant 33,7M lignes à chaque appel, ils lisent directement `customers_features_train` — une ligne par client, déjà prête, à jour à chaque exécution (`mode("overwrite")`).
-
----
-
-## 7. Écriture finale dans PostgreSQL
-
-```python
-for name, df in tables.items():
-    df.write.mode("overwrite").jdbc(
-        url=jdbc_url,
-        table=name,
-        properties=jdbc_props
-    )
-```
-
-Le mode `overwrite` recrée entièrement chaque table à chaque exécution du pipeline batch.
-
----
-
-## 8. Stack technique
-
-- **Docker / Docker Compose** — orchestration des services.
-- **Apache Spark (PySpark)** — traitement distribué, nettoyage, feature engineering.
-- **PostgreSQL** — stockage final du Data Warehouse et des Data Marts.
-- **JDBC** (`postgresql-42.7.3.jar`) — pont de communication entre Spark (JVM) et PostgreSQL.
-- **Adminer** — interface web de consultation de la base (voir section 10).
-
----
-
-## 9. Lancer le pipeline
-
-```bash
-# 1. Démarrer l'infrastructure
-docker compose up -d
-
-# 2. Exécuter le job Spark — lancé depuis le conteneur worker,
-#    connecté au master via son URL réseau interne
-docker exec shop-spark-worker \
-  /opt/spark/bin/spark-submit \
-  --master spark://spark-master:7077 \
-  /opt/spark/work-dir/jobs/pipeline_hm.py
-```
-
-À la fin de l'exécution, les 8 tables sont disponibles dans PostgreSQL : `dim_customer`, `dim_article`, `dim_date`, `fact_transaction`, `customers_features_train`, `products_performance`, `daily_sales`, `customer_segments_summary`.
-
-### 9.1 Consulter l'UI Spark Master
-
-| URL | Description |
-|---|---|
-| `http://localhost:8080` | UI web du Spark Master (`SPARK_MASTER_WEBUI_PORT`, voir `.env`) — liste des workers connectés, jobs en cours (`Running Applications`) et terminés, logs par exécuteur. |
-| `spark://spark-master:7077` | Port du protocole Spark lui-même (`SPARK_MASTER_PORT`) — **pas** une URL de navigateur, utilisée uniquement par `spark-submit` et les workers pour se connecter au cluster. |
-
-Le job soumis apparaît dans la liste `Running Applications` de l'UI dès son lancement, puis passe dans `Completed Applications` une fois terminé.
-
-### 9.2 Dépannage courant (Docker Desktop / Windows)
-
-| Symptôme | Cause | Solution |
+| Fichier | Rôle | Déclenché |
 |---|---|---|
-| `container ... is not running` sur `docker exec shop-spark-worker ...` | `spark-worker` (et/ou `spark-master`) arrêté entre deux sessions Docker Desktop | `docker compose up -d spark-master spark-worker` (ou `docker compose up -d` pour tout redémarrer d'un coup) |
-| `Bind for 0.0.0.0:XXXX failed: port is already allocated` | Un port du projet (ex. `6333`, `8080`) est déjà utilisé par un **autre** projet Docker actif sur la machine | `docker ps` pour identifier le conteneur concurrent, puis `docker stop <nom>` — ou changer le port en conflit dans `.env` |
-| `UnknownHostException: spark-master: ... Temporary failure in name resolution` dans `docker logs shop-spark-master` | Le DNS interne de Docker (résolution des noms de service, ex. `spark-master`) est dans un état incohérent — fréquent après beaucoup de conteneurs/réseaux actifs simultanément | `docker compose down` (supprime le réseau `shop_data_net`) → `wsl --shutdown` (PowerShell admin) → rouvrir Docker Desktop → `docker compose up -d` |
-| `localhost:8080` inaccessible alors que `docker ps` montre `shop-spark-master` comme `Up` | Un **autre** projet Docker utilise déjà le port 8080 (ex. phpMyAdmin d'un autre projet) | Vérifier `docker ps` pour repérer le conteneur qui occupe réellement le port, l'arrêter, puis relancer `spark-master` |
+| `jobs/pipeline_hm.py` | Nettoie, joint, calcule les features RFM et écrit les Data Marts. Accepte un argument `--source` : `csv` (comportement d'origine, lit les fichiers bruts — chargement initial) ou `warehouse` (relit `fact_transaction` déjà en base, donc CSV **et** streaming fusionnés — voir 3.2.1). | À la demande (chargement initial) puis chaque nuit à 02h00 en mode `warehouse` |
+| `jobs/merge_stream_to_warehouse.py` | **Nouveau.** Fusionne les transactions déjà validées par le streaming (`stream_transactions_ingested`) dans `fact_transaction`, en `append` uniquement, sans jamais retraiter deux fois la même donnée grâce à un **watermark** (table `merge_watermark`, une ligne par pipeline de fusion, mise à jour à chaque exécution réussie). | Toutes les 15 minutes |
+
+#### 3.2.1 Pourquoi fusionner streaming et batch dans `fact_transaction` ?
+
+Sans fusion, `stream_transactions_ingested` (alimentée en continu) et `fact_transaction` (chargée une fois depuis les CSV) restent deux tables isolées : les Data Marts, recalculés uniquement à partir des CSV, ne voient jamais les transactions temps réel. `fact_transaction` devient donc la source de vérité unique, alimentée par deux canaux — un chargement initial depuis les CSV, puis des ajouts périodiques depuis le streaming — et `pipeline_hm.py --source=warehouse` recalcule ensuite les Data Marts sur cet ensemble combiné plutôt que sur les seuls CSV bruts.
+
+### 3.3 `spark/streaming_pipeline/`
+
+Le pipeline temps réel : lit en continu le topic Kafka `transactions.raw`, valide et enrichit chaque message, écrit en ajout (`append`) dans PostgreSQL (`stream_transactions_ingested`). Se lance une fois et ne s'arrête jamais.
+
+**Détail complet de ce pipeline (Dockerfile, docker-compose, méthodes de chaque fichier) : voir [`spark/streaming_pipeline/README.md`](./spark/streaming_pipeline/README.md).**
+
+### 3.4 `spark/job_trigger_api.py`
+
+**Nouveau.** n8n ne peut pas exécuter `spark-submit` directement (ce n'est pas un script Python qu'il sait lancer nativement) — ce petit serveur FastAPI joue exactement le même rôle que `producer_api.py` côté Kafka, mais pour les jobs Spark batch. Il expose `POST /jobs/{job_name}` (`job_name` = `merge-stream` ou `compute-rfm`) et lance, via `docker exec`, le `spark-submit` correspondant sur le conteneur `spark-worker`.
+
+Il tourne dans son propre conteneur (`spark-job-trigger`, voir docker-compose ci-dessous) et est le **seul** service à monter le socket Docker (`/var/run/docker.sock`) — jamais n8n lui-même, pour limiter la surface d'attaque.
 
 ---
 
-## 10. Visualiser le Data Warehouse via Adminer
+## 4. Le dossier `model_api/`
 
-**Adminer** est une interface web légère (l'équivalent de phpMyAdmin, mais compatible PostgreSQL nativement) pour consulter les tables sans terminal.
+**Nouveau.** API de prédiction (FastAPI) qui charge le dernier modèle entraîné et expose un endpoint de prédiction, à partir des features calculées dans les Data Marts (`customers_features_train`, etc.). C'est le dernier maillon du cycle nocturne : une fois les Data Marts recalculés, n8n appelle cette API pour rafraîchir les prédictions consommées en aval (churn, recommandation, etc.).
 
-Ajout dans `docker-compose.yml`, **à l'intérieur** de `services:` :
+---
 
-```yaml
-  adminer:
-    image: adminer:latest
-    container_name: shop-adminer
-    restart: unless-stopped
-    ports:
-      - "8081:8080"
-    networks:
-      - shop_data_net
+## 5. Fichiers à la racine
+
+| Fichier | Rôle |
+|---|---|
+| `Dockerfile` | Image Spark commune (batch + streaming), avec le driver JDBC PostgreSQL. |
+| `docker-compose.yml` | Orchestration de tous les services : Kafka, Zookeeper, PostgreSQL, Spark (master/worker/streaming), **`spark-job-trigger`** (nouveau), **`model-api`** (nouveau), n8n, le producer API, Adminer. |
+| `.env` | Configuration partagée (identifiants PostgreSQL, ports, nom du topic Kafka) — lue par tous les services. |
+
+
+
+## 6. Orchestration n8n — cycle complet
+
+Quatre workflows n8n couvrent l'ensemble du cycle, du message Kafka jusqu'à la prédiction :
+
+| # | Étape | Déclencheur n8n | Fréquence | Appelle |
+|---|---|---|---|---|
+| 1 | Simulation d'arrivée de transactions | Manuel ou schedule | Ponctuel (test/démo) | `POST /produce?date=...` sur `kafka-producer-api` |
+| 2 | Ingestion streaming | Aucun (le job tourne déjà en continu, voir [`spark/streaming_pipeline/README.md`](./spark/streaming_pipeline/README.md)) | — | — |
+| 3 | Fusion streaming → Data Warehouse | Schedule Trigger | Toutes les 15 min | `POST /jobs/merge-stream` sur `spark-job-trigger` |
+| 4 | Recalcul des Data Marts (RFM, popularité produit, ...) | Schedule Trigger | Chaque nuit à 02h00 | `POST /jobs/compute-rfm?source=warehouse` sur `spark-job-trigger` |
+| 5 | Rafraîchissement des prédictions | Enchaîné après l'étape 4 (même workflow) | Chaque nuit à 02h00, juste après l'étape 4 | `model-api` |
+
+```
+                n8n
+                 │
+                 │ POST /produce?date=2026-07-08     (étape 1, ponctuel)
+                 ▼
+        kafka-producer-api (FastAPI) ──► transactions_producer.py ──► Kafka topic: transactions.raw
+                                                                              │
+                                                                              ▼
+                                                          Spark Structured Streaming (étape 2, continu)
+                                                          cleaning + enrichissement
+                                                                              │
+                                                                              ▼
+                                                          stream_transactions_ingested (PostgreSQL)
+
+
+                n8n  ── toutes les 15 min ──►  POST /jobs/merge-stream  ──► spark-job-trigger
+                                                                                    │
+                                                                                    ▼
+                                                          merge_stream_to_warehouse.py (spark-submit)
+                                                                                    │
+                                                                                    ▼
+                                                              fact_transaction (Data Warehouse)
+
+
+                n8n  ── chaque nuit 02h00 ──►  POST /jobs/compute-rfm?source=warehouse  ──► spark-job-trigger
+                                                                                                    │
+                                                                                                    ▼
+                                                                  pipeline_hm.py --source=warehouse (spark-submit)
+                                                                                                    │
+                                                                                                    ▼
+                                                                       Data Marts (customers_features_train, ...)
+                                                                                                    │
+                                                                                                    ▼
+                                                                              model-api (rafraîchit les prédictions)
 ```
 
-Lancement :
+**Pourquoi `spark-job-trigger` et pas n8n directement ?** n8n n'a pas de nœud natif pour lancer `spark-submit` (ce n'est pas un binaire HTTP). Comme pour le producer Kafka (`producer_api.py`, section 2), on passe donc par un petit serveur FastAPI intermédiaire qui, lui, sait exécuter la commande — voir 3.4 pour son fonctionnement et son placement Docker.
+
+**Pourquoi deux fréquences aussi différentes (15 min vs nocturne) ?** `merge_stream_to_warehouse.py` est un simple `append` incrémental sur les nouvelles lignes uniquement (léger, peut tourner souvent). `pipeline_hm.py --source=warehouse` recalcule en revanche tous les agrégats (RFM, popularité produit) sur l'ensemble du Data Warehouse — coûteux, donc réservé à un run quotidien, la nuit, quand la charge est faible.
+
+---
+
+## 7. Commandes utiles (tests manuels)
+
 ```bash
-docker compose up -d adminer
+# Lancer le job streaming à la main (hors n8n), pour vérifier qu'il tourne correctement :
+docker exec -it shop-spark-master bash
+/opt/spark/bin/spark-submit \
+  --master spark://spark-master:7077 \
+  --packages org.apache.spark:spark-sql-kafka-0-10_2.12:3.5.1 \
+  /opt/spark/work-dir/spark/streaming_pipeline/jobs/streaming_job.py
+
+# Vérifier que le topic Kafka existe et reçoit des messages :
+docker exec -it shop-kafka bash
+kafka-topics --bootstrap-server kafka:29092 --list
 ```
-
-Accès : `http://localhost:8081`, puis connexion avec :
-
-| Champ | Valeur |
-|---|---|
-| Système | PostgreSQL |
-| Serveur | `postgres` (nom du service Docker, pas `localhost`) |
-| Utilisateur | `hm_admin` |
-| Mot de passe | celui de `POSTGRES_PASSWORD` |
-| Base de données | `hm_retail` |
-
----
-
-## 11. Cohérence avec l'EDA
-
-| Partie | Compatibilité |
-|---|---|
-| Schemas | ✅ 100 % |
-| Nettoyage customers | ✅ 100 % |
-| Nettoyage articles | ✅ 100 % |
-| Nettoyage transactions | ✅ 100 % |
-| Features RFM | ✅ 100 % |
-| Quartiles (`approxQuantile`) | ✅ Équivalent fonctionnel — remplace `ntile()` pour éviter un tri global sur une seule partition (voir ci-dessous) |
-| Tables Dashboard / RAG | ✅ 100 % |
-
-### 12. Pourquoi `ntile()` a été remplacé par `approxQuantile`
-
-`Window.orderBy("total_spend")` + `ntile(4)` nécessite un tri global de toute la colonne sur **une seule partition** (`WARN WindowExec: No Partition Defined`), ce qui a fait passer le job de quelques secondes à plus de 30 minutes sur 1,36M clients. `approxQuantile` calcule les seuils (25e/50e/75e percentile) de façon distribuée, sans ce goulot d'étranglement. Conséquence : les 4 segments ne sont plus garantis à effectifs strictement égaux (ce que faisait `ntile`), mais reflètent des **seuils de dépense réels** — plus cohérent pour une segmentation marketing, et plus rapide.
-
+Invoke-WebRequest `                                               
+>> -Method POST `                  
+>> "http://localhost:8090/produce?date=2026-07-09"                      
