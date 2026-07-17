@@ -160,7 +160,20 @@ services:
       - "8081:8080"
     networks:
       - shop_data_net
-
+  grafana:
+    image: grafana/grafana:latest
+    container_name: shop-grafana
+    restart: unless-stopped
+    ports:
+      - "3001:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=hm_admin
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning
+    networks:
+      - shop_data_net
 # ============================================================
 # SPARK MASTER
 # ============================================================
@@ -233,9 +246,9 @@ services:
     environment:
       SPARK_MASTER_URL: spark://spark-master:7077
 
-      SPARK_WORKER_MEMORY: 2G
+      SPARK_WORKER_MEMORY: 4G
 
-      SPARK_WORKER_CORES: 2
+      SPARK_WORKER_CORES: 4
 
     volumes:
 
@@ -258,10 +271,6 @@ services:
     depends_on:
       - kafka
       - spark-master
-    command: >
-      /opt/spark/bin/spark-submit
-      --master spark://spark-master:7077
-      /opt/spark/work-dir/streaming_pipeline/jobs/streaming_job.py
     env_file:
       - .env
     volumes:
@@ -450,7 +459,11 @@ volumes:
   qdrant_data:
 
   mlflow_data:
+
   streaming_checkpoint:
+
+  grafana_data:
+
 
 networks:
 

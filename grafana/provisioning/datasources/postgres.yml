@@ -1,0 +1,14 @@
+apiVersion: 1
+datasources:
+  - name: PostgreSQL-HM
+    type: postgres
+    access: proxy
+    url: postgres:5432
+    database: hm_retail
+    isDefault: true
+    user: hm_admin
+    secureJsonData:
+      password: postgres
+    jsonData:
+      sslmode: disable
+      postgresVersion: 1500

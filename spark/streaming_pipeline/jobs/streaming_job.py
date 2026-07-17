@@ -8,7 +8,7 @@ from schemas import customers_schema, articles_schema
 from validation import parse_kafka_messages, split_valid_invalid
 # from cleaning import enrich_with_dimensions
 
-spark = get_spark_session("hm_streaming_pipeline")
+spark = get_spark_session("hm_streaming_pipeline",executor_cores="2",executor_memory="512m")
 spark.sparkContext.setLogLevel("WARN")
 
 jdbc_url, jdbc_props = get_jdbc_config()
