@@ -161,26 +161,19 @@ Un flux temps réel n'est jamais garanti propre — contrairement au dataset Kag
 
 ---
 
-## 6. `spark/streaming_pipeline/utils/cleaning.py`
 
-Une seule fonction : **`enrich_with_dimensions(valid_stream_df, customers_static_df, articles_static_df)`**.
-
-Elle joint le flux de transactions validées avec deux DataFrames **statiques** (`customers`, `articles`), chargés une seule fois au démarrage du job (pas depuis un flux). C'est le pattern standard de Spark Structured Streaming appelé **stream-static join** : on enrichit un flux continu avec des données de référence qui changent rarement, via un `broadcast join` (les deux tables statiques sont petites comparées au flux, donc diffusées à tous les exécuteurs plutôt que shufflées).
-
----
-
-## 7. `spark/streaming_pipeline/jobs/streaming_job.py` — le chef d'orchestre
+## 6. `spark/streaming_pipeline/jobs/streaming_job.py` — le chef d'orchestre
 
 C'est le script principal, celui lancé par `spark-submit` dans `docker-compose.yml`. Il enchaîne, dans l'ordre :
 
 1. **Chargement des dimensions statiques** (`customers_static`, `articles_static`) — une seule fois, au démarrage.
 2. **Lecture du flux Kafka** (`spark.readStream.format("kafka")...load()`), avec `startingOffsets: "latest"` — au (re)démarrage du job, on ne relit **pas** tout l'historique du topic (sinon chaque redémarrage réinjecterait des milliers de transactions déjà traitées).
 3. **Validation** (`parse_kafka_messages` + `split_valid_invalid`, voir section 5).
-4. **Enrichissement** (`enrich_with_dimensions`, voir section 6).
-5. **Écriture en continu**, via deux fonctions appelées à chaque micro-batch (`foreachBatch`) :
-   - `write_batch_to_postgres` → écrit les transactions valides et enrichies dans la table `stream_transactions_ingested` (mode `append`).
+4. **Écriture en continu**, via deux fonctions appelées à chaque micro-batch (`foreachBatch`) :
+   - `write_batch_to_postgres` → écrit les transactions valides 
+   - `stream_transactions_ingested` (mode `append`).
    - `write_rejected_to_postgres` → écrit les messages invalides dans `stream_transactions_rejected` (mode `append`).
-6. **`spark.streams.awaitAnyTermination()`** : maintient le script en vie indéfiniment, tant qu'aucune des deux requêtes streaming ne s'arrête — c'est cette ligne qui fait que le job "ne s'arrête jamais" (section 1.2).
+5. **`spark.streams.awaitAnyTermination()`** : maintient le script en vie indéfiniment, tant qu'aucune des deux requêtes streaming ne s'arrête — c'est cette ligne qui fait que le job "ne s'arrête jamais" (section 1.2).
 
 **Pourquoi une table `stream_transactions_ingested` séparée du Data Warehouse batch (`fact_transaction`) ?** Pour ne jamais faire courir de risque au Data Warehouse déjà validé par le pipeline batch. Un job streaming, par nature moins contrôlé qu'un batch sur données figées, écrit dans sa propre table d'atterrissage. La fusion entre les deux est traitée à part, par un job dédié (`merge_stream_to_warehouse.py`) hors de ce pipeline — voir section 9.
 
@@ -188,7 +181,7 @@ C'est le script principal, celui lancé par `spark-submit` dans `docker-compose.
 
 ---
 
-## 8. Emplacement des fichiers — résumé
+## 7. Emplacement des fichiers — résumé
 
 ```
 spark/
@@ -200,7 +193,6 @@ spark/
     ├── jobs/
     │   └── streaming_job.py  ← section 7
     └── utils/
-        ├── cleaning.py       ← section 6
         └── validation.py     ← section 5
 ```
 
@@ -210,9 +202,21 @@ spark/
 
 `stream_transactions_ingested` n'est pas un point d'arrivée final — c'est une table d'atterrissage, consommée périodiquement par des jobs **batch** distincts, orchestrés par n8n :
 
-| Job | Emplacement | Fréquence | Rôle |
-|---|---|---|---|
-| `merge_stream_to_warehouse.py` | `spark/batch_ml_pipeline/jobs/` | Toutes les 15 min | Fusionne (`append`, avec watermark) les transactions validées du streaming dans `fact_transaction`, le Data Warehouse commun au batch et au streaming |
-| `pipeline_hm.py --source=warehouse` | `spark/batch_ml_pipeline/jobs/` | Chaque nuit à 02h00 | Recalcule les Data Marts (RFM, popularité produit, ...) sur `fact_transaction`, donc CSV **et** streaming combinés |
+### Exécution quotidienne du pipeline batch
+
+Chaque nuit à **02h00**, deux traitements batch sont exécutés dans un ordre précis afin de synchroniser les données et mettre à jour les Data Marts.
+
+- **`merge_stream_to_warehouse.py`** (`spark/batch_ml_pipeline/jobs/`) :  
+  Ce job récupère les transactions validées provenant du pipeline streaming et les fusionne dans la table centrale `fact_transaction` du Data Warehouse. La fusion est réalisée en mode **append** avec gestion d'un **watermark** afin d'éviter les doublons et de ne traiter que les nouvelles transactions depuis la dernière exécution.
+
+- **`pipeline_hm.py --source=warehouse`** (`spark/batch_ml_pipeline/jobs/`) :  
+  Après la mise à jour du Data Warehouse, ce job recalcule les différents **Data Marts** (RFM clients, popularité des produits, statistiques commerciales, etc.) à partir de la table `fact_transaction`. Les calculs prennent en compte l'ensemble des données disponibles, incluant les transactions historiques issues des fichiers CSV ainsi que les nouvelles transactions intégrées depuis le streaming.
+
+L'ordre d'exécution est donc le suivant :
+
+1. **02h00 :** exécution de `merge_stream_to_warehouse.py` pour intégrer les nouvelles transactions streaming dans `fact_transaction`.
+2. **Après le merge :** exécution de `pipeline_hm.py --source=warehouse` pour recalculer les agrégats et mettre à jour les Data Marts.
+
+Le pipeline streaming fonctionne en continu pendant la journée (Kafka → Spark Structured Streaming → stockage des transactions validées), tandis que les traitements batch de consolidation et d'analyse sont exécutés une seule fois par nuit.
 
 Ces deux jobs sont déclenchés par n8n via `spark/job_trigger_api.py` (le même principe que `producer_api.py` pour Kafka, mais pour `spark-submit`). Détail complet du cycle, diagramme et table des fréquences : [README principal, section 7](../../README.md#7-orchestration-n8n--cycle-complet).

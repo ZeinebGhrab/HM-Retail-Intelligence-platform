@@ -15,15 +15,7 @@ def trigger_job(job_name: str, source: str = "warehouse"):
     if job_name not in JOBS:
         raise HTTPException(status_code=404, detail=f"Job inconnu : {job_name}")
 
-    cmd = [
-        "docker",
-        "exec",
-        "shop-spark-worker",
-        "/opt/spark/bin/spark-submit",
-        "--master",
-        "spark://spark-master:7077",
-        JOBS[job_name],
-    ]
+    cmd = ["docker","exec","shop-spark-worker","/opt/spark/bin/spark-submit","--master","spark://spark-master:7077", "--driver-memory","3g","--executor-memory","3g","--executor-cores", "2",JOBS[job_name],]
 
     if job_name == "compute-rfm":
         cmd += ["--source", source]
@@ -44,9 +36,14 @@ def trigger_job(job_name: str, source: str = "warehouse"):
         }
 
     except subprocess.CalledProcessError as e:
+        print("COMMAND FAILED:", e.cmd)
+        print("RETURN CODE:", e.returncode)
+        print("STDOUT:", e.stdout)
+        print("STDERR:", e.stderr)
+
         raise HTTPException(
             status_code=500,
-            detail=e.stderr[-2000:],
+            detail=e.stderr[-2000:] if e.stderr else str(e),
         )
 
     except subprocess.TimeoutExpired:

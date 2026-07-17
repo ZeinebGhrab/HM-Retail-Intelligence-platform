@@ -29,7 +29,15 @@ raw_stream = (
 )
 
 parsed = parse_kafka_messages(raw_stream)
+parsed.writeStream \
+    .format("console") \
+    .option("truncate", False) \
+    .start()
 valid_df, rejected_df = split_valid_invalid(parsed)
+valid_df.writeStream \
+    .format("console") \
+    .option("truncate", False) \
+    .start()
 # enriched_df = enrich_with_dimensions(valid_df, customers_static, articles_static)
 
 # Cette fonction est appelée automatiquement par Spark à chaque micro-batch.

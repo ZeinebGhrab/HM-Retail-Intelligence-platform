@@ -44,9 +44,10 @@ else:  # warehouse : recalcul périodique incluant les données streaming fusion
         .join(spark.read.jdbc(jdbc_url, "dim_article", properties=jdbc_props), "article_key")
     )
     customers_clean = spark.read.jdbc(jdbc_url, "dim_customer", properties=jdbc_props)
+    articles_clean = spark.read.jdbc(jdbc_url,"dim_article",properties=jdbc_props)
 
 # ========== ETAPE 4 : FEATURE ENGINEERING ==========
-customers_features_train = compute_customer_features(master_dataset, customers_clean)
+customers_features_train = compute_customer_features(master_dataset, customers_clean,source=args.source)
 products_performance = compute_products_performance(master_dataset, articles_clean)
 daily_sales = compute_daily_sales(master_dataset)
 customer_segments_summary = compute_segment_summary(customers_features_train)

@@ -45,9 +45,22 @@ def get_spark_session(
             "spark.sql.streaming.forceDeleteTempCheckpointLocation",
             "true"
         )
+        
         .config(
             "spark.jars",
             "/opt/spark/jars/postgresql-42.7.3.jar"
+        )
+          .config(
+            "spark.executor.heartbeatInterval",
+            "60s"
+        )
+        .config(
+            "spark.network.timeout",
+            "300s"
+        )
+        .config(
+            "spark.sql.shuffle.partitions",
+            "400"
         )
     )
 

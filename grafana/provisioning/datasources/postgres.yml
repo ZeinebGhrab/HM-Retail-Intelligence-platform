@@ -10,5 +10,6 @@ datasources:
     secureJsonData:
       password: postgres
     jsonData:
+      database: hm_retail
       sslmode: disable
       postgresVersion: 1500

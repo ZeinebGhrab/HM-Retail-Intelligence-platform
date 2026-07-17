@@ -169,7 +169,7 @@ Quatre workflows n8n couvrent l'ensemble du cycle, du message Kafka jusqu'à la 
                                                                               │
                                                                               ▼
                                                           Spark Structured Streaming (étape 2, continu)
-                                                          cleaning + enrichissement
+                                                          
                                                                               │
                                                                               ▼
                                                           stream_transactions_ingested (PostgreSQL)

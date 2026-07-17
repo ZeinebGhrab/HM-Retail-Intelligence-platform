@@ -246,9 +246,9 @@ services:
     environment:
       SPARK_MASTER_URL: spark://spark-master:7077
 
-      SPARK_WORKER_MEMORY: 4G
+      SPARK_WORKER_MEMORY: 6G
 
-      SPARK_WORKER_CORES: 4
+      SPARK_WORKER_CORES: 6
 
     volumes:
 
@@ -287,6 +287,7 @@ services:
     build:
       context: ./spark
       dockerfile: job_trigger.Dockerfile
+    image: hm-retail-job-trigger:latest
     container_name: shop-job-trigger
     restart: unless-stopped
     ports:

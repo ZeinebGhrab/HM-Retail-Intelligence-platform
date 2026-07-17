@@ -2,17 +2,32 @@ from pyspark.sql import functions as F
 from pyspark.sql.window import Window
 
 DATASET_END = "2020-09-22"  # dernière date du dataset historique, pas current_date()
-def compute_customer_features(master_dataset, customers_clean):
-    date_ref = F.lit(DATASET_END).cast("date")
+def compute_customer_features(master_dataset, customers_clean,source="history"):
+    if source == "warehouse":
+        # convertir date_key (20200922) en vraie date Spark
+        master_dataset = master_dataset.withColumn(
+            "purchase_date",
+            F.to_date(
+                F.col("date_key").cast("string"),
+                "yyyyMMdd"
+            )
+        )
 
+        date_column = "purchase_date"
+        date_ref = F.current_date()
+
+    else:
+        date_column = "t_dat"
+        date_ref = F.lit(DATASET_END).cast("date")
+    
     # --- RFM de base : total_spend, n_transactions, first/last purchase
     customer_stats = (
         master_dataset.groupBy("customer_id")
         .agg(
             F.sum("price").alias("total_spend"),
             F.count("*").alias("n_transactions"),
-            F.min("t_dat").alias("first_purchase"),
-            F.max("t_dat").alias("last_purchase"),
+            F.min(date_column).alias("first_purchase"),
+            F.max(date_column).alias("last_purchase"),
             F.countDistinct("product_group_name").alias("n_distinct_categories"),
         )
     )
@@ -64,13 +79,25 @@ def compute_products_performance(master_dataset, articles_clean):
 
 
 def compute_daily_sales(master_dataset):
+    if "t_dat" in master_dataset.columns:
+        date_column = "t_dat"
+
+    else:
+        master_dataset = master_dataset.withColumn(
+            "sales_date",
+            F.to_date(
+                F.col("date_key").cast("string"),
+                "yyyyMMdd"
+            )
+        )
+        date_column = "sales_date"
     return (
-        master_dataset.groupBy("t_dat")
+        master_dataset.groupBy(date_column)
         .agg(
             F.sum("price").alias("chiffre_affaires"),
             F.count("*").alias("nb_transactions"),
         )
-        .orderBy("t_dat")
+        .orderBy(date_column)
     )
 
 

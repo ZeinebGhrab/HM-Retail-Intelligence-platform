@@ -1,0 +1,275 @@
+{
+  "name": "HM Streaming Pipeline",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 6 * * *"
+            }
+          ]
+        }
+      },
+      "id": "43c2c9e8-01fe-4ce9-9fe6-e34610fd87f1",
+      "name": "Déclencheur - Simulation quotidienne",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -176,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const startDate = new Date('2026-07-10');\nconst offset = $getWorkflowStaticData('global').dayOffset || 0;\nconst simulatedDate = new Date(startDate);\nsimulatedDate.setDate(simulatedDate.getDate() + offset);\n$getWorkflowStaticData('global').dayOffset = offset + 1;\nreturn [{ json: { date: simulatedDate.toISOString().split('T')[0] } }];"
+      },
+      "id": "0240ecb3-aac8-42bc-ae33-5b586adeeba8",
+      "name": "Calculer la date simulée",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        48,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=http://kafka-producer-api:8090/produce?date={{ $json.date }}",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "id": "19d57c21-3cfb-4ed6-8f9b-bbc33997ff09",
+      "name": "Déclencher le producer Kafka",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        272,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://spark-job-trigger:8091/jobs/merge-stream",
+        "options": {
+          "timeout": 900000
+        }
+      },
+      "id": "c54a8f94-da40-422c-be79-68e1df347fcf",
+      "name": "Lancer merge_stream_to_warehouse.py",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        48,
+        224
+      ]
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 2 * * *"
+            }
+          ]
+        }
+      },
+      "id": "0100f99d-8800-465b-8577-82556127f17b",
+      "name": "Déclencheur - RFM nocturne (02:00)",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -176,
+        224
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://spark-job-trigger:8091/jobs/compute-rfm?source=warehouse",
+        "options": {
+          "timeout": 1800000
+        }
+      },
+      "id": "68e7f0a0-d276-4c34-892f-090d538ddeda",
+      "name": "Lancer pipeline_hm.py --source=warehouse",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        272,
+        224
+      ]
+    },
+    {
+      "parameters": {
+        "unit": "minutes"
+      },
+      "id": "4198d8eb-b0a4-4edd-81d1-3998d31a7741",
+      "name": "Attendre la fin du recalcul RFM",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        496,
+        224
+      ],
+      "webhookId": "wait-rfm-completion"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://ml-model-api:8000/predict/batch",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { \"source_table\": \"customers_features_train\" } }}",
+        "options": {
+          "timeout": 300000
+        }
+      },
+      "id": "dd5f4580-3928-4f72-83ad-9c3e4efaceaa",
+      "name": "Appeler l'API modèle (prédiction) — à activer",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        720,
+        224
+      ],
+      "disabled": true,
+      "notes": "Désactivé volontairement : le modèle ML n'est pas encore construit (hors périmètre Data Engineering). Activer ce nœud une fois l'API modèle disponible."
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://django-api:8000/api/pipeline/refresh/",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { \"source\": \"rfm_nightly\", \"executed_at\": $now } }}",
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "id": "80e9bc51-849d-47be-a668-34c635745cae",
+      "name": "Notifier Django (RFM + prédictions à jour)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        944,
+        224
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Déclencheur - Simulation quotidienne": {
+      "main": [
+        [
+          {
+            "node": "Calculer la date simulée",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calculer la date simulée": {
+      "main": [
+        [
+          {
+            "node": "Déclencher le producer Kafka",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Lancer merge_stream_to_warehouse.py": {
+      "main": [
+        [
+          {
+            "node": "Lancer pipeline_hm.py --source=warehouse",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Déclencheur - RFM nocturne (02:00)": {
+      "main": [
+        [
+          {
+            "node": "Lancer merge_stream_to_warehouse.py",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Lancer pipeline_hm.py --source=warehouse": {
+      "main": [
+        [
+          {
+            "node": "Attendre la fin du recalcul RFM",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Attendre la fin du recalcul RFM": {
+      "main": [
+        [
+          {
+            "node": "Appeler l'API modèle (prédiction) — à activer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Appeler l'API modèle (prédiction) — à activer": {
+      "main": [
+        [
+          {
+            "node": "Notifier Django (RFM + prédictions à jour)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "0fbc42c3-ed11-4014-8483-2d69bcacb933",
+  "meta": {
+    "instanceId": "0f6e4efa941233266de0ae9dc686c8bfe65c2abb1a3b106323c3e3114452a425"
+  },
+  "nodeGroups": [],
+  "id": "DTeU5b6vxY1GsAMX",
+  "tags": []
+}
