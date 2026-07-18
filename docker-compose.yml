@@ -294,6 +294,8 @@ services:
     restart: unless-stopped
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      - shop_data_net
 # ============================================================
 # spark-job-trigger
 # ============================================================
