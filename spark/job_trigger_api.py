@@ -25,7 +25,7 @@ def trigger_job(job_name: str, source: str = "warehouse"):
             cmd,
             capture_output=True,
             text=True,
-            timeout=1800,
+            timeout=7200,
             check=True,
         )
 
