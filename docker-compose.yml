@@ -280,6 +280,20 @@ services:
       - streaming_checkpoint:/opt/spark/work-dir/checkpoint
     networks:
       - shop_data_net
+
+  streaming-api:
+    build:
+      context: ./spark
+      dockerfile: streaming_pipeline/streaming_api.Dockerfile
+
+    container_name: shop-streaming-api
+
+    ports:
+      - "8000:8000"
+
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
 # ============================================================
 # spark-job-trigger
 # ============================================================
