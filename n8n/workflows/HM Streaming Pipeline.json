@@ -39,7 +39,7 @@
         "method": "POST",
         "url": "=http://kafka-producer-api:8090/produce?date={{ $json.date }}",
         "options": {
-          "timeout": 60000
+          "timeout": 7200000
         }
       },
       "id": "19d57c21-3cfb-4ed6-8f9b-bbc33997ff09",
@@ -65,7 +65,7 @@
       "typeVersion": 4.2,
       "position": [
         48,
-        224
+        416
       ]
     },
     {
@@ -85,7 +85,7 @@
       "typeVersion": 1.2,
       "position": [
         -176,
-        224
+        416
       ]
     },
     {
@@ -93,7 +93,7 @@
         "method": "POST",
         "url": "http://spark-job-trigger:8091/jobs/compute-rfm?source=warehouse",
         "options": {
-          "timeout": 1800000
+          "timeout": 7200000
         }
       },
       "id": "68e7f0a0-d276-4c34-892f-090d538ddeda",
@@ -102,7 +102,7 @@
       "typeVersion": 4.2,
       "position": [
         272,
-        224
+        416
       ]
     },
     {
@@ -115,7 +115,7 @@
       "typeVersion": 1.1,
       "position": [
         496,
-        224
+        416
       ],
       "webhookId": "wait-rfm-completion"
     },
@@ -145,7 +145,7 @@
       "typeVersion": 4.2,
       "position": [
         720,
-        224
+        416
       ],
       "disabled": true,
       "notes": "Désactivé volontairement : le modèle ML n'est pas encore construit (hors périmètre Data Engineering). Activer ce nœud une fois l'API modèle disponible."
@@ -159,8 +159,8 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        192,
-        624
+        944,
+        416
       ]
     },
     {
@@ -173,8 +173,8 @@
       "type": "@n8n/n8n-nodes-langchain.chainLlm",
       "typeVersion": 1.4,
       "position": [
-        416,
-        624
+        1168,
+        416
       ]
     },
     {
@@ -191,8 +191,8 @@
       "type": "@n8n/n8n-nodes-langchain.lmOllama",
       "typeVersion": 1,
       "position": [
-        496,
-        848
+        1248,
+        640
       ]
     },
     {
@@ -204,8 +204,8 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        768,
-        624
+        1520,
+        416
       ],
       "notes": "Formate exactement le PredictionData attendu par Dashboard.tsx et Django SSE"
     },
@@ -234,8 +234,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        992,
-        432
+        1744,
+        224
       ],
       "notes": "POST /api/daily-report/ → Django notifie tous les clients SSE connectés (Dashboard + ChatIA)"
     },
@@ -248,8 +248,8 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        992,
-        816
+        1744,
+        608
       ],
       "notes": "Envoie le message LLM au RAG Django → chatbot Ionic"
     },
@@ -281,8 +281,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.4,
       "position": [
-        992,
-        624
+        1744,
+        416
       ],
       "id": "20b73495-0731-4f62-b9dc-0a64ef681c7d",
       "name": "Envoyer FCM"
@@ -290,17 +290,17 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "http://spark-job-trigger:8091/jobs/compute-rfm?source=csv",
+        "url": "http://shop-streaming-api:8000/streaming",
         "options": {
-          "timeout": 1800000
+          "timeout": 7200000
         }
       },
-      "id": "d0aa2773-2834-4cfe-a4e4-6efb1400dbfd",
-      "name": "Lancer pipeline_hm.py --source=csv",
+      "id": "7d57cf4a-a7b3-4205-8f4f-4e630f576714",
+      "name": "spark_pipeline_streaming",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        528,
+        496,
         0
       ]
     }
@@ -442,7 +442,7 @@
       "main": [
         [
           {
-            "node": "Lancer pipeline_hm.py --source=csv",
+            "node": "spark_pipeline_streaming",
             "type": "main",
             "index": 0
           }
@@ -456,7 +456,7 @@
     "binaryMode": "separate",
     "availableInMCP": false
   },
-  "versionId": "35a143fc-7632-4f03-bc0b-433994cdd2df",
+  "versionId": "753d1a47-8af0-42cd-9f4e-a24b45ac2472",
   "meta": {
     "instanceId": "0f6e4efa941233266de0ae9dc686c8bfe65c2abb1a3b106323c3e3114452a425"
   },
