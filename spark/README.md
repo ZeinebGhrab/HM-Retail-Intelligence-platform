@@ -199,10 +199,13 @@ Quatre workflows n8n couvrent l'ensemble du cycle, du message Kafka jusqu'à la 
 **Pourquoi `spark-job-trigger` et pas n8n directement ?** n8n n'a pas de nœud natif pour lancer `spark-submit` (ce n'est pas un binaire HTTP). Comme pour le producer Kafka (`producer_api.py`, section 2), on passe donc par un petit serveur FastAPI intermédiaire qui, lui, sait exécuter la commande — voir 3.4 pour son fonctionnement et son placement Docker.
 
 **Pourquoi deux fréquences aussi différentes (15 min vs nocturne) ?** `merge_stream_to_warehouse.py` est un simple `append` incrémental sur les nouvelles lignes uniquement (léger, peut tourner souvent). `pipeline_hm.py --source=warehouse` recalcule en revanche tous les agrégats (RFM, popularité produit) sur l'ensemble du Data Warehouse — coûteux, donc réservé à un run quotidien, la nuit, quand la charge est faible.
-
 ---
 
-## 7. Commandes utiles (tests manuels)
+## 7. API
+
+- **`streaming_api.py`** (à côté de `spark/streaming_pipeline/`) : expose `POST /streaming`, appelé par n8n pour démarrer le job Spark Streaming en continu via `spark-submit` s'il ne tourne pas déjà (ou simplement renvoyer son statut s'il tourne), avec des endpoints optionnels `/stop`, `/status` et `/logs` pour le piloter et le surveiller manuellement.
+- **`job_trigger_api.py`** (`spark/job_trigger_api.py`) : expose `POST /jobs/{job_name}`, appelé par n8n chaque nuit à 02:00, d'abord pour `merge-stream` (fusion `stream_transactions_ingested` → `fact_transaction`) puis, juste après dans le même workflow, pour `compute-rfm --source=warehouse` (recalcul des Data Marts sur le warehouse fraîchement fusionné), en lançant le `spark-submit` correspondant via `docker exec` sur `shop-spark-worker`, avec un timeout de sécurité de 30 minutes. 
+## 8. Commandes utiles (tests manuels)
 
 ```bash
 # Lancer le job streaming à la main (hors n8n), pour vérifier qu'il tourne correctement :

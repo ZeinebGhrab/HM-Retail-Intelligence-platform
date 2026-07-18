@@ -15,7 +15,7 @@ def trigger_job(job_name: str, source: str = "warehouse"):
     if job_name not in JOBS:
         raise HTTPException(status_code=404, detail=f"Job inconnu : {job_name}")
 
-    cmd = ["docker","exec","shop-spark-worker","/opt/spark/bin/spark-submit","--master","spark://spark-master:7077", "--driver-memory","3g","--executor-memory","3g","--executor-cores", "2",JOBS[job_name],]
+    cmd = ["docker","exec","shop-spark-worker","/opt/spark/bin/spark-submit","--master","spark://spark-master:7077", "--driver-memory","1g","--executor-memory","4g","--executor-cores", "4","--total-executor-cores","4",JOBS[job_name],]
 
     if job_name == "compute-rfm":
         cmd += ["--source", source]

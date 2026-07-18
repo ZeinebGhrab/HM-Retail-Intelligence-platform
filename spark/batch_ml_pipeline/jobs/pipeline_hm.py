@@ -37,15 +37,36 @@ if args.source == "csv":
     .join(F.broadcast(customers_clean), "customer_id", "left")
     .join(F.broadcast(articles_clean), "article_id", "left")
   )
-else:  # warehouse : recalcul périodique incluant les données streaming fusionnées
-    master_dataset = (
-        spark.read.jdbc(jdbc_url, "fact_transaction", properties=jdbc_props)
-        .join(spark.read.jdbc(jdbc_url, "dim_customer", properties=jdbc_props), "customer_key")
-        .join(spark.read.jdbc(jdbc_url, "dim_article", properties=jdbc_props), "article_key")
-    )
-    customers_clean = spark.read.jdbc(jdbc_url, "dim_customer", properties=jdbc_props)
-    articles_clean = spark.read.jdbc(jdbc_url,"dim_article",properties=jdbc_props)
+# else:  # warehouse : recalcul périodique incluant les données streaming fusionnées
+#     master_dataset = (
+#         spark.read.jdbc(jdbc_url, "fact_transaction", properties=jdbc_props)
+#         .join(spark.read.jdbc(jdbc_url, "dim_customer", properties=jdbc_props), "customer_key")
+#         .join(spark.read.jdbc(jdbc_url, "dim_article", properties=jdbc_props), "article_key")
+#     )
+#     customers_clean = spark.read.jdbc(jdbc_url, "dim_customer", properties=jdbc_props)
+#     articles_clean = spark.read.jdbc(jdbc_url,"dim_article",properties=jdbc_props)
+else:
+    fact_bounds = spark.read.jdbc(
+        jdbc_url,
+        "(SELECT MIN(customer_key) as min_ck, MAX(customer_key) as max_ck FROM fact_transaction) t",
+        properties=jdbc_props
+    ).collect()[0]
 
+    customers_clean = spark.read.jdbc(jdbc_url, "dim_customer", properties=jdbc_props)
+    articles_clean = spark.read.jdbc(jdbc_url, "dim_article", properties=jdbc_props)
+
+    master_dataset = (
+        spark.read.jdbc(
+            jdbc_url, "fact_transaction",
+            column="customer_key",            
+            lowerBound=fact_bounds["min_ck"],
+            upperBound=fact_bounds["max_ck"],
+            numPartitions=20,
+            properties=jdbc_props,
+        )
+        .join(F.broadcast(customers_clean), "customer_key")
+        .join(F.broadcast(articles_clean), "article_key")
+    )
 # ========== ETAPE 4 : FEATURE ENGINEERING ==========
 customers_features_train = compute_customer_features(master_dataset, customers_clean,source=args.source)
 products_performance = compute_products_performance(master_dataset, articles_clean)
@@ -55,38 +76,39 @@ customer_segments_summary = compute_segment_summary(customers_features_train)
 # ========== ETAPE 5 : STOCKAGE (Data Warehouse uniquement) ==========
 
 # --- Dimensions ---
-dim_customer = (
-    customers_clean.select(
-        "customer_id", "age", "age_group", "club_member_status",
-        "fashion_news_frequency", "postal_code"
+if args.source == "csv":
+    # --- Dimensions + Fact : uniquement au chargement initial ---
+    dim_customer = (
+        customers_clean.select(
+            "customer_id", "age", "age_group", "club_member_status",
+            "fashion_news_frequency", "postal_code"
+        )
+        .withColumn("customer_key", F.abs(F.crc32(F.col("customer_id").cast("binary"))))
     )
-    .withColumn("customer_key", F.abs(F.crc32(F.col("customer_id").cast("binary"))))
-)
 
-dim_article = (
-    articles_clean.select(
-        "article_id", "product_group_name", "product_type_name",
-        "department_name", "colour_group_name", "index_name", "section_name"
+    dim_article = (
+        articles_clean.select(
+            "article_id", "prod_name", "product_group_name", "product_type_name",
+            "department_name", "colour_group_name", "index_name", "section_name"
+        )
+        .withColumn("article_key", F.col("article_id"))
     )
-    .withColumn("article_key", F.col("article_id"))
-)
 
-dim_date = (
-    master_dataset.select("t_dat").distinct()
-    .withColumn("date_key", F.date_format("t_dat", "yyyyMMdd").cast("int"))
-    .withColumn("month", F.month("t_dat"))
-    .withColumn("year", F.year("t_dat"))
-    .withColumnRenamed("t_dat", "date")
-)
+    dim_date = (
+        master_dataset.select("t_dat").distinct()
+        .withColumn("date_key", F.date_format("t_dat", "yyyyMMdd").cast("int"))
+        .withColumn("month", F.month("t_dat"))
+        .withColumn("year", F.year("t_dat"))
+        .withColumnRenamed("t_dat", "date")
+    )
 
-# --- Fact ---
-fact_transaction = (
-    master_dataset
-    .withColumn("customer_key", F.abs(F.crc32(F.col("customer_id").cast("binary"))))
-    .withColumn("article_key", F.col("article_id"))
-    .withColumn("date_key", F.date_format("t_dat", "yyyyMMdd").cast("int"))
-    .select("customer_key", "article_key", "date_key", "price", "sales_channel_id")
-)
+    fact_transaction = (
+        master_dataset
+        .withColumn("customer_key", F.abs(F.crc32(F.col("customer_id").cast("binary"))))
+        .withColumn("article_key", F.col("article_id"))
+        .withColumn("date_key", F.date_format("t_dat", "yyyyMMdd").cast("int"))
+        .select("customer_key", "article_key", "date_key", "price", "sales_channel_id")
+    )
 
 # --- Marts dérivés ---
 customers_features_train_wh = (
@@ -97,22 +119,37 @@ customers_features_train_wh = (
 
 products_performance_wh = products_performance.withColumnRenamed("article_id", "article_key")
 
-daily_sales_wh = (
-    daily_sales
-    .withColumn("date_key", F.date_format("t_dat", "yyyyMMdd").cast("int"))
-    .drop("t_dat")
-)
+if args.source == "csv":
+    daily_sales_wh = (
+        daily_sales
+        .withColumn("date_key", F.date_format("t_dat", "yyyyMMdd").cast("int"))
+        .drop("t_dat")
+    )
+else:
+    daily_sales_wh = (
+        daily_sales
+        .withColumn("date_key", F.date_format("sales_date", "yyyyMMdd").cast("int"))
+        .drop("sales_date")
+    )
+if args.source == "csv":
+    tables = {
+        "dim_customer": dim_customer,
+        "dim_article": dim_article,
+        "dim_date": dim_date,
+        "fact_transaction": fact_transaction,
+        "customers_features_train": customers_features_train_wh,
+        "products_performance": products_performance_wh,
+        "daily_sales": daily_sales_wh,
+        "customer_segments_summary": customer_segments_summary,
+    }
+else:
+     tables = {
+        "customers_features_train": customers_features_train_wh,
+        "products_performance": products_performance_wh,
+        "daily_sales": daily_sales_wh,
+        "customer_segments_summary": customer_segments_summary,
+    }
 
-tables = {
-    "dim_customer": dim_customer,
-    "dim_article": dim_article,
-    "dim_date": dim_date,
-    "fact_transaction": fact_transaction,
-    "customers_features_train": customers_features_train_wh,
-    "products_performance": products_performance_wh,
-    "daily_sales": daily_sales_wh,
-    "customer_segments_summary": customer_segments_summary,
-}
 for name, df in tables.items():
     df.write.mode("overwrite").jdbc(url=jdbc_url, table=name, properties=jdbc_props)
 

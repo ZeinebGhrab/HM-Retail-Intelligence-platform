@@ -58,10 +58,6 @@ def get_spark_session(
             "spark.network.timeout",
             "300s"
         )
-        .config(
-            "spark.sql.shuffle.partitions",
-            "400"
-        )
     )
 
     # Ajouter seulement si fourni
