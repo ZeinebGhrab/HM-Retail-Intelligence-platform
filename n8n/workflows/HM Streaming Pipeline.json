@@ -277,23 +277,6 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "http://shop-streaming-api:8000/streaming",
-        "options": {
-          "timeout": 7200000
-        }
-      },
-      "id": "7d57cf4a-a7b3-4205-8f4f-4e630f576714",
-      "name": "spark_pipeline_streaming",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [
-        640,
-        0
-      ]
-    },
-    {
-      "parameters": {
-        "method": "POST",
         "url": "=http://generator_api:8089/generate?date={{ $json.date }}&rows=100",
         "options": {
           "timeout": 120000
@@ -446,13 +429,7 @@
     },
     "Déclencher le producer Kafka": {
       "main": [
-        [
-          {
-            "node": "spark_pipeline_streaming",
-            "type": "main",
-            "index": 0
-          }
-        ]
+        []
       ]
     },
     "Générer les transactions du jour": {
@@ -484,7 +461,7 @@
     "binaryMode": "separate",
     "availableInMCP": false
   },
-  "versionId": "e46e1e89-a90f-4ac3-903c-ee0b00d54a9b",
+  "versionId": "1e8d0aef-71f5-491f-a404-2d3abe0724f8",
   "meta": {
     "instanceId": "0f6e4efa941233266de0ae9dc686c8bfe65c2abb1a3b106323c3e3114452a425"
   },

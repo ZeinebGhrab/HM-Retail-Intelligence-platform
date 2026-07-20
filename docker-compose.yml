@@ -263,39 +263,83 @@ services:
 # spark-streaming-job
 # ============================================================
 
+  # spark-streaming-job:
+  #   build:
+  #     context: ./spark
+  #   container_name: shop-spark-streaming
+  #   restart: unless-stopped
+  #   depends_on:
+  #     - kafka
+  #     - spark-master
+  #   env_file:
+  #     - .env
+  #   volumes:
+  #     - ./data:/opt/spark/work-dir/data
+  #     - ./spark/common:/opt/spark/work-dir/common
+  #     - ./spark:/opt/spark/work-dir/spark
+  #     - streaming_checkpoint:/opt/spark/work-dir/checkpoint
+  #   networks:
+  #     - shop_data_net
+  # ============================================================
+# SPARK STREAMING JOB
+# ============================================================
+
   spark-streaming-job:
+
     build:
       context: ./spark
+
     container_name: shop-spark-streaming
+
     restart: unless-stopped
+
     depends_on:
       - kafka
       - spark-master
+      - spark-worker
+
     env_file:
       - .env
+
+    command: >
+      /opt/spark/bin/spark-submit
+      --master spark://spark-master:7077
+      --deploy-mode client
+      --driver-memory 1g
+      --executor-memory 2g
+      --executor-cores 2
+      --total-executor-cores 2
+      /opt/spark/work-dir/spark/streaming_pipeline/jobs/streaming_job.py
+
+
     volumes:
+
       - ./data:/opt/spark/work-dir/data
-      - ./spark/common:/opt/spark/work-dir/common
+
       - ./spark:/opt/spark/work-dir/spark
+
       - streaming_checkpoint:/opt/spark/work-dir/checkpoint
+
+
     networks:
+
       - shop_data_net
 
-  streaming-api:
-    build:
-      context: ./spark
-      dockerfile: streaming_pipeline/streaming_api.Dockerfile
+  # streaming-api:
+  #   build:
+  #     context: ./spark
+  #     dockerfile: streaming_pipeline/streaming_api.Dockerfile
 
-    container_name: shop-streaming-api
+  #   container_name: shop-streaming-api
 
-    ports:
-      - "8000:8000"
+  #   ports:
+  #     - "8000:8000"
 
-    restart: unless-stopped
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
-    networks:
-      - shop_data_net
+  #   restart: unless-stopped
+  #   volumes:
+  #     - /var/run/docker.sock:/var/run/docker.sock
+  #   networks:
+  #     - shop_data_net
 # ============================================================
 # spark-job-trigger
 # ============================================================
