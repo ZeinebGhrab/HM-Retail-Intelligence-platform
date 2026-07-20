@@ -23,19 +23,6 @@
     },
     {
       "parameters": {
-        "jsCode": "const startDate = new Date('2026-07-10');\nconst offset = $getWorkflowStaticData('global').dayOffset || 0;\nconst simulatedDate = new Date(startDate);\nsimulatedDate.setDate(simulatedDate.getDate() + offset);\n$getWorkflowStaticData('global').dayOffset = offset + 1;\nreturn [{ json: { date: simulatedDate.toISOString().split('T')[0] } }];"
-      },
-      "id": "0240ecb3-aac8-42bc-ae33-5b586adeeba8",
-      "name": "Calculer la date simulée",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        48,
-        0
-      ]
-    },
-    {
-      "parameters": {
         "method": "POST",
         "url": "=http://kafka-producer-api:8090/produce?date={{ $json.date }}",
         "options": {
@@ -47,7 +34,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        272,
+        464,
         0
       ]
     },
@@ -234,8 +221,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        1744,
-        224
+        1712,
+        128
       ],
       "notes": "POST /api/daily-report/ → Django notifie tous les clients SSE connectés (Dashboard + ChatIA)"
     },
@@ -300,7 +287,37 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        496,
+        640,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=http://generator_api:8089/generate?date={{ $json.date }}&rows=100",
+        "options": {
+          "timeout": 120000
+        }
+      },
+      "id": "2cd55b4c-f658-46e8-886a-e9a3e06fad2e",
+      "name": "Générer les transactions du jour",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        256,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const today = new Date();\ntoday.setHours(0, 0, 0, 0); // normaliser à minuit\n\nreturn [{ json: { date: today.toISOString().split('T')[0] } }];"
+      },
+      "id": "93e73f73-5dfb-4f25-92a5-b2d1080432fc",
+      "name": "Calculer la date simulée1",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        64,
         0
       ]
     }
@@ -311,18 +328,7 @@
       "main": [
         [
           {
-            "node": "Calculer la date simulée",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Calculer la date simulée": {
-      "main": [
-        [
-          {
-            "node": "Déclencher le producer Kafka",
+            "node": "Calculer la date simulée1",
             "type": "main",
             "index": 0
           }
@@ -448,6 +454,28 @@
           }
         ]
       ]
+    },
+    "Générer les transactions du jour": {
+      "main": [
+        [
+          {
+            "node": "Déclencher le producer Kafka",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calculer la date simulée1": {
+      "main": [
+        [
+          {
+            "node": "Générer les transactions du jour",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     }
   },
   "active": false,
@@ -456,7 +484,7 @@
     "binaryMode": "separate",
     "availableInMCP": false
   },
-  "versionId": "753d1a47-8af0-42cd-9f4e-a24b45ac2472",
+  "versionId": "e46e1e89-a90f-4ac3-903c-ee0b00d54a9b",
   "meta": {
     "instanceId": "0f6e4efa941233266de0ae9dc686c8bfe65c2abb1a3b106323c3e3114452a425"
   },
