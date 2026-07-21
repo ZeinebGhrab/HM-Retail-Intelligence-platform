@@ -25,6 +25,7 @@ raw_stream = (
     .option("kafka.bootstrap.servers", kafka_conf["bootstrap.servers"])
     .option("subscribe", kafka_conf["topic"])
     .option("startingOffsets", "latest")   # ne rejoue pas tout l'historique du topic à chaque redémarrage
+    .option("failOnDataLoss", "false")
     .load()
 )
 
