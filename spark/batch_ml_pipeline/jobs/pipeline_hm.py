@@ -15,7 +15,12 @@ from features import (
     compute_segment_summary,
 )
 
-spark = get_spark_session("hm_pipeline")
+# spark = get_spark_session("hm_pipeline")
+spark = get_spark_session(
+    app_name="hm_pipeline",
+    executor_cores="4",
+    executor_memory="4g"
+)
 parser = argparse.ArgumentParser()
 parser.add_argument("--source", choices=["csv", "warehouse"], default="csv")
 args = parser.parse_args()
@@ -129,7 +134,7 @@ else:
     daily_sales_wh = (
         daily_sales
         .withColumn("date_key", F.date_format("date_key", "yyyyMMdd").cast("int"))
-        .drop("sales_date")
+        
     )
 if args.source == "csv":
     tables = {
