@@ -133,8 +133,8 @@ if args.source == "csv":
 else:
     daily_sales_wh = (
         daily_sales
-        .withColumn("date_key", F.date_format("date_key", "yyyyMMdd").cast("int"))
-        
+        .withColumn("date_key",F.date_format("sales_date", "yyyyMMdd").cast("int"))
+        .drop("sales_date")
     )
 if args.source == "csv":
     tables = {
