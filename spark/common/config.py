@@ -85,6 +85,12 @@ def get_jdbc_config():
         "user": os.environ.get("POSTGRES_USER"),
         "password": os.environ.get("POSTGRES_PASSWORD"),
         "driver": "org.postgresql.Driver",
+         # Lecture par paquets
+        "fetchsize": "10000",
+        "connectTimeout": "30",
+        "socketTimeout": "60",
+        "loginTimeout": "30",
+        "tcpKeepAlive": "true",
     }
     return url, props
 

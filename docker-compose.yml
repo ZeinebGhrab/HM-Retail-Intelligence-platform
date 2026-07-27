@@ -182,7 +182,7 @@ services:
 
     build:
       context: ./spark
-
+    restart: unless-stopped
     container_name: shop-spark-master
 
     hostname: spark-master
@@ -226,39 +226,39 @@ services:
 # SPARK WORKER
 # ============================================================
 
-  # spark-worker:
+  spark-worker:
 
-  #   build:
-  #     context: ./spark
+    build:
+      context: ./spark
 
-  #   container_name: shop-spark-worker
+    container_name: shop-spark-worker
 
-  #   hostname: spark-worker
+    hostname: spark-worker
+    restart: unless-stopped
+    depends_on:
+      - spark-master
 
-  #   depends_on:
-  #     - spark-master
+    command: >
+      /opt/spark/bin/spark-class org.apache.spark.deploy.worker.Worker
+      spark://spark-master:7077
+    env_file:
+      - .env
+    environment:
+      SPARK_MASTER_URL: spark://spark-master:7077
 
-  #   command: >
-  #     /opt/spark/bin/spark-class org.apache.spark.deploy.worker.Worker
-  #     spark://spark-master:7077
-  #   env_file:
-  #     - .env
-  #   environment:
-  #     SPARK_MASTER_URL: spark://spark-master:7077
+      SPARK_WORKER_MEMORY: 6G
 
-  #     SPARK_WORKER_MEMORY: 6G
+      SPARK_WORKER_CORES: 6
 
-  #     SPARK_WORKER_CORES: 6
+    volumes:
 
-  #   volumes:
+      - ./data:/opt/spark/work-dir/data
 
-  #     - ./data:/opt/spark/work-dir/data
+      - ./spark:/opt/spark/work-dir/spark
+      # - ./.env:/opt/spark/work-dir/.env 
 
-  #     - ./spark:/opt/spark/work-dir/spark
-  #     # - ./.env:/opt/spark/work-dir/.env 
-
-  #   networks:
-  #     - shop_data_net
+    networks:
+      - shop_data_net
 # ============================================================
 # spark-streaming-job
 # ============================================================
@@ -286,74 +286,74 @@ services:
 # SPARK WORKER STREAMING
 # ============================================================
 
-  spark-worker-streaming:
+#   spark-worker-streaming:
 
-    build:
-      context: ./spark
+#     build:
+#       context: ./spark
 
-    container_name: shop-spark-worker-streaming
+#     container_name: shop-spark-worker-streaming
 
-    hostname: spark-worker-streaming
+#     hostname: spark-worker-streaming
 
-    depends_on:
-      - spark-master
+#     depends_on:
+#       - spark-master
 
-    command: >
-      /opt/spark/bin/spark-class
-      org.apache.spark.deploy.worker.Worker
-      spark://spark-master:7077
+#     command: >
+#       /opt/spark/bin/spark-class
+#       org.apache.spark.deploy.worker.Worker
+#       spark://spark-master:7077
 
-    env_file:
-      - .env
+#     env_file:
+#       - .env
 
-    environment:
-      SPARK_MASTER_URL: spark://spark-master:7077
-      SPARK_WORKER_MEMORY: 2G
-      SPARK_WORKER_CORES: 2
+#     environment:
+#       SPARK_MASTER_URL: spark://spark-master:7077
+#       SPARK_WORKER_MEMORY: 2G
+#       SPARK_WORKER_CORES: 2
 
-    volumes:
-      - ./data:/opt/spark/work-dir/data
-      - ./spark:/opt/spark/work-dir/spark
+#     volumes:
+#       - ./data:/opt/spark/work-dir/data
+#       - ./spark:/opt/spark/work-dir/spark
 
-    networks:
-      - shop_data_net
+#     networks:
+#       - shop_data_net
 
 
-# ============================================================
-# SPARK WORKER BATCH
-# ============================================================
+# # ============================================================
+# # SPARK WORKER BATCH
+# # ============================================================
 
-  spark-worker-batch:
+#   spark-worker-batch:
 
-    build:
-      context: ./spark
+#     build:
+#       context: ./spark
 
-    container_name: shop-spark-worker-batch
+#     container_name: shop-spark-worker-batch
 
-    hostname: spark-worker-batch
+#     hostname: spark-worker-batch
 
-    depends_on:
-      - spark-master
+#     depends_on:
+#       - spark-master
 
-    command: >
-      /opt/spark/bin/spark-class
-      org.apache.spark.deploy.worker.Worker
-      spark://spark-master:7077
+#     command: >
+#       /opt/spark/bin/spark-class
+#       org.apache.spark.deploy.worker.Worker
+#       spark://spark-master:7077
 
-    env_file:
-      - .env
+#     env_file:
+#       - .env
 
-    environment:
-      SPARK_MASTER_URL: spark://spark-master:7077
-      SPARK_WORKER_MEMORY: 6G
-      SPARK_WORKER_CORES: 4
+#     environment:
+#       SPARK_MASTER_URL: spark://spark-master:7077
+#       SPARK_WORKER_MEMORY: 6G
+#       SPARK_WORKER_CORES: 4
 
-    volumes:
-      - ./data:/opt/spark/work-dir/data
-      - ./spark:/opt/spark/work-dir/spark
+#     volumes:
+#       - ./data:/opt/spark/work-dir/data
+#       - ./spark:/opt/spark/work-dir/spark
 
-    networks:
-      - shop_data_net
+#     networks:
+#       - shop_data_net
   # ============================================================
 # SPARK STREAMING JOB
 # ============================================================
@@ -370,7 +370,7 @@ services:
     depends_on:
       - kafka
       - spark-master
-      - spark-worker-streaming
+      - spark-worker
 
     env_file:
       - .env

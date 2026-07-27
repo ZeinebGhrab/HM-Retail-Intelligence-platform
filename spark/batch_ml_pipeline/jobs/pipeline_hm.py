@@ -4,7 +4,7 @@ sys.path.append("/opt/spark/work-dir/batch_ml_pipeline/utils")
 sys.path.append("/opt/spark/work-dir/common")
 import argparse
 from pyspark.sql import functions as F
-
+from pyspark import StorageLevel
 from config import get_spark_session, get_jdbc_config
 from schemas import transactions_schema, customers_schema, articles_schema
 from cleaning import clean_transactions, clean_customers, clean_articles
@@ -62,17 +62,33 @@ else:
 
     master_dataset = (
         spark.read.jdbc(
-            jdbc_url, "fact_transaction",
+            jdbc_url,  """ (
+           SELECT
+            f.customer_key,
+            f.article_key,
+            f.date_key,
+            f.price,
+            a.article_id
+        FROM fact_transaction f
+        LEFT JOIN dim_article a
+        ON f.article_key = a.article_key
+        ) t
+        """,
             column="customer_key",            
             lowerBound=fact_bounds["min_ck"],
             upperBound=fact_bounds["max_ck"],
-            numPartitions=20,
+            numPartitions=8,
             properties=jdbc_props,
         )
-        .join(F.broadcast(customers_clean), "customer_key")
-        .join(F.broadcast(articles_clean), "article_key")
+        .join(customers_clean, "customer_key", "left")
+        .join(F.broadcast(articles_clean.select("article_key","product_group_name","prod_name")), "article_key", "left")
+        .persist(StorageLevel.MEMORY_AND_DISK)
     )
+    master_dataset.printSchema()
+    
+    
 # ========== ETAPE 4 : FEATURE ENGINEERING ==========
+
 customers_features_train = compute_customer_features(master_dataset, customers_clean,source=args.source)
 products_performance = compute_products_performance(master_dataset, articles_clean)
 daily_sales = compute_daily_sales(master_dataset)
@@ -157,6 +173,7 @@ else:
 
 for name, df in tables.items():
     df.write.mode("overwrite").jdbc(url=jdbc_url, table=name, properties=jdbc_props)
-
+if args.source == "warehouse":
+    master_dataset.unpersist()
 print("Pipeline terminé : Data Warehouse mis à jour (star schema + marts dérivés).")
 spark.stop()
