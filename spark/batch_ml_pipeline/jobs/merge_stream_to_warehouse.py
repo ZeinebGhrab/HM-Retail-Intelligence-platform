@@ -88,7 +88,7 @@ if new_stream_data.rdd.isEmpty():
 # --- 3. Construire les clés de dimension (mêmes règles que le batch) ---
 new_fact = (
     new_stream_data
-    .withColumn("customer_key", F.abs(F.crc32(F.col("customer_id").cast("binary"))))
+    .withColumn("customer_key", F.abs(F.xxhash64("customer_id")))
     .withColumn("article_key", F.col("article_id"))
     .withColumn("date_key", F.date_format("t_dat", "yyyyMMdd").cast("int"))
     .select("customer_key", "article_key", "date_key", "price", "sales_channel_id")
