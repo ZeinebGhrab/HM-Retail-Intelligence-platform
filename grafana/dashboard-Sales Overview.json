@@ -4,17 +4,19 @@
   "metadata": {
     "name": "adf4rtw",
     "namespace": "default",
-    "uid": "62103a8c-cc48-4859-835e-13e6eb473953",
-    "resourceVersion": "1785157129174983",
-    "generation": 1,
-    "creationTimestamp": "2026-07-27T12:58:49Z",
+    "uid": "5996c4a7-8305-45ad-a6fe-fc2ef8f6573c",
+    "resourceVersion": "1785247879597011",
+    "generation": 3,
+    "creationTimestamp": "2026-07-28T13:10:30Z",
     "labels": {
-      "grafana.app/deprecatedInternalID": "1062972293750784"
+      "grafana.app/deprecatedInternalID": "1428299692429312"
     },
     "annotations": {
-      "grafana.app/createdBy": "user:efsrdn15y794we",
+      "grafana.app/createdBy": "user:eftf05rgth81sf",
       "grafana.app/folder": "",
-      "grafana.app/saved-from-ui": "Grafana v13.1.0 (b309c9bb3b)"
+      "grafana.app/saved-from-ui": "Grafana v13.1.1 (a9cee6e172)",
+      "grafana.app/updatedBy": "user:eftf05rgth81sf",
+      "grafana.app/updatedTimestamp": "2026-07-28T14:11:19Z"
     }
   },
   "spec": {
@@ -40,7 +42,6 @@
       }
     ],
     "cursorSync": "Off",
-    "description": "",
     "editable": true,
     "elements": {
       "panel-1": {
@@ -69,7 +70,7 @@
                         "editorMode": "code",
                         "format": "time_series",
                         "rawQuery": true,
-                        "rawSql": "SELECT\r\n    d.date AS time,\r\n    SUM(f.price) AS revenue\r\nFROM fact_transaction f\r\nJOIN dim_date d\r\nON f.date_key = d.date_key\r\nGROUP BY d.date\r\nORDER BY d.date;",
+                        "rawSql": "SELECT\r\n    TO_DATE(date_key::text,'YYYYMMDD') AS time,\r\n    chiffre_affaires AS revenue\r\nFROM daily_sales\r\nORDER BY date_key;",
                         "sql": {
                           "columns": [
                             {
@@ -101,7 +102,7 @@
           "vizConfig": {
             "kind": "VizConfig",
             "group": "timeseries",
-            "version": "13.1.0",
+            "version": "13.1.1",
             "spec": {
               "options": {
                 "annotations": {
@@ -207,7 +208,7 @@
                         "editorMode": "code",
                         "format": "table",
                         "rawQuery": true,
-                        "rawSql": "SELECT\r\n    CONCAT(d.year,'-',LPAD(d.month::text,2,'0')) AS month,\r\n    COUNT(*) AS nb_transactions\r\nFROM fact_transaction f\r\nJOIN dim_date d\r\nON f.date_key=d.date_key\r\nGROUP BY d.year,d.month\r\nORDER BY d.year,d.month;",
+                        "rawSql": "SELECT\r\n    TO_CHAR(TO_DATE(date_key::text,'YYYYMMDD'),'YYYY-MM') AS month,\r\n    SUM(nb_transactions) AS nb_transactions\r\nFROM daily_sales\r\nGROUP BY month\r\nORDER BY month;",
                         "sql": {
                           "columns": [
                             {
@@ -239,7 +240,7 @@
           "vizConfig": {
             "kind": "VizConfig",
             "group": "barchart",
-            "version": "13.1.0",
+            "version": "13.1.1",
             "spec": {
               "options": {
                 "barRadius": 0,
@@ -336,7 +337,7 @@
                         "editorMode": "code",
                         "format": "table",
                         "rawQuery": true,
-                        "rawSql": "SELECT\r\n    CONCAT(d.year,'-',LPAD(d.month::text,2,'0')) AS month,\r\n    SUM(f.price) AS revenue\r\nFROM fact_transaction f\r\nJOIN dim_date d\r\nON f.date_key=d.date_key\r\nGROUP BY d.year,d.month\r\nORDER BY d.year,d.month;",
+                        "rawSql": "SELECT\r\n    TO_CHAR(TO_DATE(date_key::text,'YYYYMMDD'),'YYYY-MM') AS month,\r\n    SUM(chiffre_affaires) AS revenue\r\nFROM daily_sales\r\nGROUP BY month\r\nORDER BY month;",
                         "sql": {
                           "columns": [
                             {
@@ -368,7 +369,7 @@
           "vizConfig": {
             "kind": "VizConfig",
             "group": "barchart",
-            "version": "13.1.0",
+            "version": "13.1.1",
             "spec": {
               "options": {
                 "barRadius": 0,
@@ -467,7 +468,7 @@
                         "editorMode": "code",
                         "format": "table",
                         "rawQuery": true,
-                        "rawSql": "SELECT ROUND(AVG(price)::numeric, 2) AS average_ticket\r\nFROM fact_transaction;",
+                        "rawSql": "SELECT\r\n    ROUND((SUM(chiffre_affaires) / NULLIF(SUM(nb_transactions),0))::numeric,2) AS average_ticket\r\nFROM daily_sales;",
                         "sql": {
                           "columns": [
                             {
@@ -499,7 +500,7 @@
           "vizConfig": {
             "kind": "VizConfig",
             "group": "stat",
-            "version": "13.1.0",
+            "version": "13.1.1",
             "spec": {
               "options": {
                 "colorMode": "value",
@@ -569,7 +570,7 @@
                         "editorMode": "code",
                         "format": "table",
                         "rawQuery": true,
-                        "rawSql": "SELECT COUNT(*) AS total_sales\r\nFROM fact_transaction;",
+                        "rawSql": "SELECT\r\n    SUM(nb_transactions) AS total_sales\r\nFROM daily_sales;",
                         "sql": {
                           "columns": [
                             {
@@ -601,7 +602,238 @@
           "vizConfig": {
             "kind": "VizConfig",
             "group": "stat",
-            "version": "13.1.0",
+            "version": "13.1.1",
+            "spec": {
+              "options": {
+                "colorMode": "value",
+                "graphMode": "area",
+                "justifyMode": "auto",
+                "orientation": "auto",
+                "percentChangeColorMode": "standard",
+                "reduceOptions": {
+                  "calcs": [
+                    "lastNotNull"
+                  ],
+                  "fields": "",
+                  "values": false
+                },
+                "showPercentChange": false,
+                "textMode": "auto",
+                "wideLayout": true
+              },
+              "fieldConfig": {
+                "defaults": {
+                  "thresholds": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "value": 0,
+                        "color": "green"
+                      },
+                      {
+                        "value": 80,
+                        "color": "red"
+                      }
+                    ]
+                  },
+                  "color": {
+                    "mode": "thresholds"
+                  }
+                },
+                "overrides": []
+              }
+            }
+          }
+        }
+      },
+      "panel-6": {
+        "kind": "Panel",
+        "spec": {
+          "id": 6,
+          "title": "Nombre de transactions par jour ",
+          "description": "Suivre le volume de transactions jour par jour",
+          "links": [],
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "query": {
+                      "kind": "DataQuery",
+                      "group": "grafana-postgresql-datasource",
+                      "version": "v0",
+                      "datasource": {
+                        "name": "P753663B68B6CC69D"
+                      },
+                      "spec": {
+                        "dataset": "hm_retail",
+                        "editorMode": "code",
+                        "format": "table",
+                        "rawQuery": true,
+                        "rawSql": "SELECT\r\n    TO_DATE(date_key::text,'YYYYMMDD') AS time,\r\n    nb_transactions\r\nFROM daily_sales\r\nORDER BY date_key;",
+                        "sql": {
+                          "columns": [
+                            {
+                              "parameters": [],
+                              "type": "function"
+                            }
+                          ],
+                          "groupBy": [
+                            {
+                              "property": {
+                                "type": "string"
+                              },
+                              "type": "groupBy"
+                            }
+                          ],
+                          "limit": 50
+                        }
+                      }
+                    },
+                    "refId": "A",
+                    "hidden": false
+                  }
+                }
+              ],
+              "transformations": [],
+              "queryOptions": {}
+            }
+          },
+          "vizConfig": {
+            "kind": "VizConfig",
+            "group": "barchart",
+            "version": "13.1.1",
+            "spec": {
+              "options": {
+                "barRadius": 0,
+                "barWidth": 0.97,
+                "fullHighlight": false,
+                "groupWidth": 0.7,
+                "legend": {
+                  "calcs": [],
+                  "displayMode": "list",
+                  "overflow": "ellipsis",
+                  "placement": "bottom",
+                  "showLegend": true
+                },
+                "orientation": "horizontal",
+                "showValue": "auto",
+                "stacking": "none",
+                "tooltip": {
+                  "hideZeros": false,
+                  "mode": "single",
+                  "sort": "none"
+                },
+                "xTickLabelRotation": 0,
+                "xTickLabelSpacing": 0
+              },
+              "fieldConfig": {
+                "defaults": {
+                  "thresholds": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "value": 0,
+                        "color": "green"
+                      },
+                      {
+                        "value": 80,
+                        "color": "red"
+                      }
+                    ]
+                  },
+                  "color": {
+                    "mode": "palette-classic"
+                  },
+                  "custom": {
+                    "axisBorderShow": false,
+                    "axisCenteredZero": false,
+                    "axisColorMode": "text",
+                    "axisLabel": "",
+                    "axisPlacement": "auto",
+                    "fillOpacity": 80,
+                    "gradientMode": "none",
+                    "hideFrom": {
+                      "legend": false,
+                      "tooltip": false,
+                      "viz": false
+                    },
+                    "lineWidth": 1,
+                    "scaleDistribution": {
+                      "type": "linear"
+                    },
+                    "thresholdsStyle": {
+                      "mode": "off"
+                    }
+                  }
+                },
+                "overrides": []
+              }
+            }
+          }
+        }
+      },
+      "panel-7": {
+        "kind": "Panel",
+        "spec": {
+          "id": 7,
+          "title": "Chiffre d'affaires moyen par jour",
+          "description": "Indicateur global : CA moyen généré par jour sur toute la période couverte.",
+          "links": [],
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "query": {
+                      "kind": "DataQuery",
+                      "group": "grafana-postgresql-datasource",
+                      "version": "v0",
+                      "datasource": {
+                        "name": "P753663B68B6CC69D"
+                      },
+                      "spec": {
+                        "dataset": "hm_retail",
+                        "editorMode": "code",
+                        "format": "table",
+                        "rawQuery": true,
+                        "rawSql": "SELECT\r\n    ROUND(AVG(chiffre_affaires)::numeric,2) AS ca_moyen_journalier\r\nFROM daily_sales;",
+                        "sql": {
+                          "columns": [
+                            {
+                              "parameters": [],
+                              "type": "function"
+                            }
+                          ],
+                          "groupBy": [
+                            {
+                              "property": {
+                                "type": "string"
+                              },
+                              "type": "groupBy"
+                            }
+                          ],
+                          "limit": 50
+                        }
+                      }
+                    },
+                    "refId": "A",
+                    "hidden": false
+                  }
+                }
+              ],
+              "transformations": [],
+              "queryOptions": {}
+            }
+          },
+          "vizConfig": {
+            "kind": "VizConfig",
+            "group": "stat",
+            "version": "13.1.1",
             "spec": {
               "options": {
                 "colorMode": "value",
@@ -712,6 +944,32 @@
               "element": {
                 "kind": "ElementReference",
                 "name": "panel-5"
+              }
+            }
+          },
+          {
+            "kind": "GridLayoutItem",
+            "spec": {
+              "x": 12,
+              "y": 16,
+              "width": 12,
+              "height": 8,
+              "element": {
+                "kind": "ElementReference",
+                "name": "panel-6"
+              }
+            }
+          },
+          {
+            "kind": "GridLayoutItem",
+            "spec": {
+              "x": 0,
+              "y": 24,
+              "width": 12,
+              "height": 8,
+              "element": {
+                "kind": "ElementReference",
+                "name": "panel-7"
               }
             }
           }

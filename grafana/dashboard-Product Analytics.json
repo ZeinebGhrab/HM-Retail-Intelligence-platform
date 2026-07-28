@@ -4,19 +4,19 @@
   "metadata": {
     "name": "ad7wvpg",
     "namespace": "default",
-    "uid": "916e92d6-49a8-4716-bbb2-fe153bd62bc4",
-    "resourceVersion": "1785159842730009",
+    "uid": "fa50c132-56f4-4e6f-871f-6b4e06e42485",
+    "resourceVersion": "1785247319694998",
     "generation": 2,
-    "creationTimestamp": "2026-07-27T13:27:31Z",
+    "creationTimestamp": "2026-07-28T13:10:19Z",
     "labels": {
-      "grafana.app/deprecatedInternalID": "1070198072909824"
+      "grafana.app/deprecatedInternalID": "1428252091273216"
     },
     "annotations": {
-      "grafana.app/createdBy": "user:efsrdn15y794we",
+      "grafana.app/createdBy": "user:eftf05rgth81sf",
       "grafana.app/folder": "",
-      "grafana.app/saved-from-ui": "Grafana v13.1.0 (b309c9bb3b)",
-      "grafana.app/updatedBy": "user:efsrdn15y794we",
-      "grafana.app/updatedTimestamp": "2026-07-27T13:44:02Z"
+      "grafana.app/saved-from-ui": "Grafana v13.1.1 (a9cee6e172)",
+      "grafana.app/updatedBy": "user:eftf05rgth81sf",
+      "grafana.app/updatedTimestamp": "2026-07-28T14:01:59Z"
     }
   },
   "spec": {
@@ -102,7 +102,7 @@
           "vizConfig": {
             "kind": "VizConfig",
             "group": "barchart",
-            "version": "13.1.0",
+            "version": "13.1.1",
             "spec": {
               "options": {
                 "barRadius": 0,
@@ -231,7 +231,7 @@
           "vizConfig": {
             "kind": "VizConfig",
             "group": "barchart",
-            "version": "13.1.0",
+            "version": "13.1.1",
             "spec": {
               "options": {
                 "barRadius": 0,
@@ -360,7 +360,7 @@
           "vizConfig": {
             "kind": "VizConfig",
             "group": "piechart",
-            "version": "13.1.0",
+            "version": "13.1.1",
             "spec": {
               "options": {
                 "legend": {
@@ -430,7 +430,7 @@
                         "editorMode": "code",
                         "format": "table",
                         "rawQuery": true,
-                        "rawSql": "SELECT\r\n    a.product_group_name,\r\n    COUNT(*) AS ventes\r\nFROM fact_transaction f\r\nJOIN dim_article a\r\nON f.article_key = a.article_key\r\nGROUP BY a.product_group_name\r\nORDER BY ventes DESC\r\nLIMIT 10;",
+                        "rawSql": "SELECT\r\n    product_group_name,\r\n    SUM(n_sales) AS ventes\r\nFROM products_performance\r\nGROUP BY product_group_name\r\nORDER BY ventes DESC\r\nLIMIT 10;",
                         "sql": {
                           "columns": [
                             {
@@ -462,7 +462,7 @@
           "vizConfig": {
             "kind": "VizConfig",
             "group": "barchart",
-            "version": "13.1.0",
+            "version": "13.1.1",
             "spec": {
               "options": {
                 "barRadius": 0.05,
@@ -592,7 +592,7 @@
           "vizConfig": {
             "kind": "VizConfig",
             "group": "piechart",
-            "version": "13.1.0",
+            "version": "13.1.1",
             "spec": {
               "options": {
                 "legend": {

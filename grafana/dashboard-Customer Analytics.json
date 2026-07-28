@@ -4,19 +4,19 @@
   "metadata": {
     "name": "advzvfm",
     "namespace": "default",
-    "uid": "5bd086ca-09cf-45fd-9ff1-358de49ae206",
-    "resourceVersion": "1785161251234017",
+    "uid": "ae7c11a5-aa28-4702-b8ab-78b8e9b03208",
+    "resourceVersion": "1785247544232988",
     "generation": 2,
-    "creationTimestamp": "2026-07-27T13:58:55Z",
+    "creationTimestamp": "2026-07-28T13:09:51Z",
     "labels": {
-      "grafana.app/deprecatedInternalID": "1078099239870464"
+      "grafana.app/deprecatedInternalID": "1428136206848000"
     },
     "annotations": {
-      "grafana.app/createdBy": "user:efsrdn15y794we",
+      "grafana.app/createdBy": "user:eftf05rgth81sf",
       "grafana.app/folder": "",
-      "grafana.app/saved-from-ui": "Grafana v13.1.0 (b309c9bb3b)",
-      "grafana.app/updatedBy": "user:efsrdn15y794we",
-      "grafana.app/updatedTimestamp": "2026-07-27T14:07:31Z"
+      "grafana.app/saved-from-ui": "Grafana v13.1.1 (a9cee6e172)",
+      "grafana.app/updatedBy": "user:eftf05rgth81sf",
+      "grafana.app/updatedTimestamp": "2026-07-28T14:05:44Z"
     }
   },
   "spec": {
@@ -102,7 +102,7 @@
           "vizConfig": {
             "kind": "VizConfig",
             "group": "barchart",
-            "version": "13.1.0",
+            "version": "13.1.1",
             "spec": {
               "options": {
                 "barRadius": 0,
@@ -231,7 +231,7 @@
           "vizConfig": {
             "kind": "VizConfig",
             "group": "piechart",
-            "version": "13.1.0",
+            "version": "13.1.1",
             "spec": {
               "options": {
                 "legend": {
@@ -333,7 +333,7 @@
           "vizConfig": {
             "kind": "VizConfig",
             "group": "piechart",
-            "version": "13.1.0",
+            "version": "13.1.1",
             "spec": {
               "options": {
                 "legend": {
@@ -403,7 +403,7 @@
                         "editorMode": "code",
                         "format": "table",
                         "rawQuery": true,
-                        "rawSql": "SELECT\r\nc.customer_id,\r\nSUM(f.price) AS total_spend\r\nFROM fact_transaction f\r\nJOIN dim_customer c\r\nON f.customer_key=c.customer_key\r\nGROUP BY c.customer_id\r\nORDER BY total_spend DESC\r\nLIMIT 20;",
+                        "rawSql": "SELECT\r\n    c.customer_id,\r\n    cf.total_spend\r\nFROM customers_features_train cf\r\nJOIN dim_customer c\r\nON cf.customer_key = c.customer_key\r\nORDER BY cf.total_spend DESC\r\nLIMIT 20;",
                         "sql": {
                           "columns": [
                             {
@@ -435,7 +435,7 @@
           "vizConfig": {
             "kind": "VizConfig",
             "group": "table",
-            "version": "13.1.0",
+            "version": "13.1.1",
             "spec": {
               "options": {
                 "cellHeight": "sm",
@@ -534,7 +534,7 @@
           "vizConfig": {
             "kind": "VizConfig",
             "group": "barchart",
-            "version": "13.1.0",
+            "version": "13.1.1",
             "spec": {
               "options": {
                 "barRadius": 0,
@@ -663,7 +663,7 @@
           "vizConfig": {
             "kind": "VizConfig",
             "group": "stat",
-            "version": "13.1.0",
+            "version": "13.1.1",
             "spec": {
               "options": {
                 "colorMode": "value",

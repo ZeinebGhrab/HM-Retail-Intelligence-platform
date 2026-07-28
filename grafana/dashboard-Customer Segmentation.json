@@ -4,19 +4,17 @@
   "metadata": {
     "name": "ad6pnn6",
     "namespace": "default",
-    "uid": "2d597276-45a0-4fe4-80d7-bdf63223eb50",
-    "resourceVersion": "1785163279138004",
-    "generation": 2,
-    "creationTimestamp": "2026-07-27T14:05:38Z",
+    "uid": "239aef50-47bf-41c1-ba7a-918f1e84e011",
+    "resourceVersion": "1785244207458007",
+    "generation": 1,
+    "creationTimestamp": "2026-07-28T13:10:07Z",
     "labels": {
-      "grafana.app/deprecatedInternalID": "1079789720543232"
+      "grafana.app/deprecatedInternalID": "1428202996944896"
     },
     "annotations": {
-      "grafana.app/createdBy": "user:efsrdn15y794we",
+      "grafana.app/createdBy": "user:eftf05rgth81sf",
       "grafana.app/folder": "",
-      "grafana.app/saved-from-ui": "Grafana v13.1.0 (b309c9bb3b)",
-      "grafana.app/updatedBy": "user:efsrdn15y794we",
-      "grafana.app/updatedTimestamp": "2026-07-27T14:41:19Z"
+      "grafana.app/saved-from-ui": "Grafana v13.1.1 (a9cee6e172)"
     }
   },
   "spec": {
