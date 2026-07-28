@@ -12,12 +12,12 @@
           ]
         }
       },
-      "id": "43c2c9e8-01fe-4ce9-9fe6-e34610fd87f1",
+      "id": "075915c7-10d9-496e-b5bd-e650a010c439",
       "name": "Déclencheur - Simulation quotidienne",
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1.2,
       "position": [
-        -176,
+        0,
         0
       ]
     },
@@ -29,12 +29,12 @@
           "timeout": 7200000
         }
       },
-      "id": "19d57c21-3cfb-4ed6-8f9b-bbc33997ff09",
+      "id": "84ff65db-b0fb-4656-9c42-a8b63bd9659f",
       "name": "Déclencher le producer Kafka",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        464,
+        672,
         0
       ]
     },
@@ -46,12 +46,12 @@
           "timeout": 900000
         }
       },
-      "id": "c54a8f94-da40-422c-be79-68e1df347fcf",
+      "id": "7395a2c0-f54f-4b86-89d4-ef2646b6a570",
       "name": "Lancer merge_stream_to_warehouse.py",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        48,
+        224,
         416
       ]
     },
@@ -66,12 +66,12 @@
           ]
         }
       },
-      "id": "0100f99d-8800-465b-8577-82556127f17b",
+      "id": "dac4b049-ab9d-43bc-90e8-0a847f783620",
       "name": "Déclencheur - RFM nocturne (02:00)",
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1.2,
       "position": [
-        -176,
+        0,
         416
       ]
     },
@@ -83,12 +83,12 @@
           "timeout": 7200000
         }
       },
-      "id": "68e7f0a0-d276-4c34-892f-090d538ddeda",
+      "id": "79a2177d-76e8-4849-bec1-4a60a53a920d",
       "name": "Lancer pipeline_hm.py --source=warehouse",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        272,
+        448,
         416
       ]
     },
@@ -96,12 +96,12 @@
       "parameters": {
         "unit": "minutes"
       },
-      "id": "4198d8eb-b0a4-4edd-81d1-3998d31a7741",
+      "id": "fa9e1c3a-bd77-41ff-b1de-1e545539e7bf",
       "name": "Attendre la fin du recalcul RFM",
       "type": "n8n-nodes-base.wait",
       "typeVersion": 1.1,
       "position": [
-        496,
+        672,
         416
       ],
       "webhookId": "wait-rfm-completion"
@@ -126,12 +126,12 @@
           "timeout": 300000
         }
       },
-      "id": "dd5f4580-3928-4f72-83ad-9c3e4efaceaa",
+      "id": "deefbfeb-797a-4381-9d20-092aeaf889e4",
       "name": "Appeler l'API modèle (prédiction) — à activer",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        720,
+        896,
         416
       ],
       "disabled": true,
@@ -141,12 +141,12 @@
       "parameters": {
         "jsCode": "const data = $input.first().json;\n\nconst prompt = `Tu es l assistant analytique de ShopAnalytics pour Anavid Store 360. Voici les predictions de frequentation pour aujourd hui (${data.date_prevision}) : Visiteurs prevus : ${data.visiteurs_prevus}. Profil dominant : ${data.profil_dominant}. Niveau d affluence : ${data.niveau_affluence}. Heure de pointe : ${data.heure_pointe_debut} a ${data.heure_pointe_fin}. Redige un message professionnel et concis de 4 a 5 phrases en francais a destination de l equipe du magasin. Mentionne le nombre de visiteurs, le profil dominant, le niveau d affluence et donne 1 a 2 recommandations concretes sur la gestion du personnel ou des caisses.`;\n\nreturn [{\n  json: {\n    prompt: prompt,\n    prediction: data\n  }\n}];"
       },
-      "id": "a3b2414a-878a-4b20-b006-4a6dd9c143b6",
+      "id": "f2ad0012-c906-4cee-a461-700f5f923304",
       "name": "Préparer Prompt Ollama",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        944,
+        1120,
         416
       ]
     },
@@ -155,12 +155,12 @@
         "promptType": "define",
         "text": "={{ $('Préparer Prompt Ollama').item.json.prompt }}"
       },
-      "id": "806d93b8-ec85-43d0-aa24-09e438c55d95",
+      "id": "e134191b-0e9b-4c40-98b4-3e67d3da5354",
       "name": "Basic LLM Chain",
       "type": "@n8n/n8n-nodes-langchain.chainLlm",
       "typeVersion": 1.4,
       "position": [
-        1168,
+        1344,
         416
       ]
     },
@@ -173,12 +173,12 @@
           "numPredict": 300
         }
       },
-      "id": "ea9de0f0-2457-4d8a-8671-d2457141a00e",
+      "id": "b9049b9a-d66b-4bdc-8fae-2936d1b41d04",
       "name": "Ollama Model",
       "type": "@n8n/n8n-nodes-langchain.lmOllama",
       "typeVersion": 1,
       "position": [
-        1248,
+        1424,
         640
       ]
     },
@@ -186,12 +186,12 @@
       "parameters": {
         "jsCode": "// Formate le payload attendu par Django SSE (receive_daily_report)\n// et par le Dashboard.tsx (PredictionData interface)\nconst llmText = $input.first().json.text?.trim();\nconst pred = $('Préparer Prompt Ollama').first().json.prediction;\n\nconst payload = {\n  type: 'llm_report',\n  date: pred.date_prevision,\n  generated_at: new Date().toISOString(),\n  message: llmText,\n  prediction: {\n    visiteurs_prevus: pred.visiteurs_prevus,\n    profil_dominant:  pred.profil_dominant,\n    niveau_affluence: pred.niveau_affluence,\n    heure_pointe:     `${pred.heure_pointe_debut} - ${pred.heure_pointe_fin}`\n  }\n};\n\nreturn [{ json: payload }];"
       },
-      "id": "65083a0c-4af4-4b58-bb90-972c56f9972a",
+      "id": "bb3b3dd5-4568-4d99-9705-76052f018aa3",
       "name": "Formater Payload SSE",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1520,
+        1696,
         416
       ],
       "notes": "Formate exactement le PredictionData attendu par Dashboard.tsx et Django SSE"
@@ -216,13 +216,13 @@
           "timeout": 10000
         }
       },
-      "id": "7ca16ce9-c66b-4087-b228-9cb08de8ee44",
+      "id": "2b2e4937-3fe4-4bee-b495-3d22124253ce",
       "name": "Push SSE → Django",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        1712,
-        128
+        1920,
+        224
       ],
       "notes": "POST /api/daily-report/ → Django notifie tous les clients SSE connectés (Dashboard + ChatIA)"
     },
@@ -230,12 +230,12 @@
       "parameters": {
         "jsCode": "// Appel HTTP via $http natif de N8N (fetch et http sont bloqués)\nconst llmText = $input.first().json.text?.trim();\nconst prediction = $('Préparer Prompt Ollama').first().json.prediction;\n\nlet chatAnswer = llmText;\n\ntry {\n  const response = await $http.request({\n    method: 'POST',\n    url: 'http://django_api:8000/api/chat/',\n    headers: { 'Content-Type': 'application/json' },\n    body: {\n      question: `Rapport quotidien automatique du ${prediction.date_prevision} : ${llmText}`\n    },\n    json: true\n  });\n  chatAnswer = response.answer || llmText;\n} catch (err) {\n  console.log('Django indisponible, fallback LLM : ' + err.message);\n}\n\nconst notification = {\n  id: Date.now(),\n  date: prediction.date_prevision,\n  generated_at: new Date().toISOString(),\n  visiteurs_prevus: prediction.visiteurs_prevus,\n  profil_dominant: prediction.profil_dominant,\n  niveau_affluence: prediction.niveau_affluence,\n  heure_pointe: `${prediction.heure_pointe_debut} - ${prediction.heure_pointe_fin}`,\n  message: chatAnswer,\n  model: 'llama3.2:3b-instruct-q4_K_M',\n  type: 'daily_report'\n};\n\nreturn [{ json: notification }];"
       },
-      "id": "189418cd-c331-4223-986c-1842df0c81ab",
+      "id": "314f3d26-963a-456c-988b-5f91648791f5",
       "name": "Envoyer au Chatbot",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1744,
+        1920,
         608
       ],
       "notes": "Envoie le message LLM au RAG Django → chatbot Ionic"
@@ -268,26 +268,26 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.4,
       "position": [
-        1744,
+        1920,
         416
       ],
-      "id": "20b73495-0731-4f62-b9dc-0a64ef681c7d",
+      "id": "35fa189f-cb9f-42e6-801a-14f9b0a35427",
       "name": "Envoyer FCM"
     },
     {
       "parameters": {
         "method": "POST",
-        "url": "=http://generator_api:8089/generate?date={{ $json.date }}&rows=100",
+        "url": "=http://generator_api:8089/generate?date={{$json.date}}&rows=5",
         "options": {
           "timeout": 120000
         }
       },
-      "id": "2cd55b4c-f658-46e8-886a-e9a3e06fad2e",
+      "id": "f7bb8887-872e-44a1-a634-7619bd8d4997",
       "name": "Générer les transactions du jour",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        256,
+        448,
         0
       ]
     },
@@ -295,12 +295,12 @@
       "parameters": {
         "jsCode": "const today = new Date();\ntoday.setHours(0, 0, 0, 0); // normaliser à minuit\n\nreturn [{ json: { date: today.toISOString().split('T')[0] } }];"
       },
-      "id": "93e73f73-5dfb-4f25-92a5-b2d1080432fc",
+      "id": "78d155a0-abed-432e-b91a-477248688ce3",
       "name": "Calculer la date simulée1",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        64,
+        224,
         0
       ]
     }
@@ -427,11 +427,6 @@
         ]
       ]
     },
-    "Déclencher le producer Kafka": {
-      "main": [
-        []
-      ]
-    },
     "Générer les transactions du jour": {
       "main": [
         [
@@ -461,11 +456,11 @@
     "binaryMode": "separate",
     "availableInMCP": false
   },
-  "versionId": "1e8d0aef-71f5-491f-a404-2d3abe0724f8",
+  "versionId": "c72668b7-0a47-41a5-84d5-15fc3c71b773",
   "meta": {
-    "instanceId": "0f6e4efa941233266de0ae9dc686c8bfe65c2abb1a3b106323c3e3114452a425"
+    "instanceId": "f15849fb7803decc780e9ebdd4c4d1f48ec9ba90690a703e071c76884ae5f88c"
   },
   "nodeGroups": [],
-  "id": "DTeU5b6vxY1GsAMX",
+  "id": "xVBjcc1cRcgwma6p",
   "tags": []
 }
