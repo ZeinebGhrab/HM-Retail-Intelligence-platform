@@ -42,14 +42,6 @@ if args.source == "csv":
     .join(F.broadcast(customers_clean), "customer_id", "left")
     .join(F.broadcast(articles_clean), "article_id", "left")
   )
-# else:  # warehouse : recalcul périodique incluant les données streaming fusionnées
-#     master_dataset = (
-#         spark.read.jdbc(jdbc_url, "fact_transaction", properties=jdbc_props)
-#         .join(spark.read.jdbc(jdbc_url, "dim_customer", properties=jdbc_props), "customer_key")
-#         .join(spark.read.jdbc(jdbc_url, "dim_article", properties=jdbc_props), "article_key")
-#     )
-#     customers_clean = spark.read.jdbc(jdbc_url, "dim_customer", properties=jdbc_props)
-#     articles_clean = spark.read.jdbc(jdbc_url,"dim_article",properties=jdbc_props)
 else:
     fact_bounds = spark.read.jdbc(
         jdbc_url,
@@ -104,7 +96,7 @@ if args.source == "csv":
             "customer_id", "age", "age_group", "club_member_status",
             "fashion_news_frequency", "postal_code"
         )
-        .withColumn("customer_key", F.abs(F.crc32(F.col("customer_id").cast("binary"))))
+        .withColumn("customer_key", F.abs(F.xxhash64("customer_id")))
     )
 
     dim_article = (
@@ -125,7 +117,7 @@ if args.source == "csv":
 
     fact_transaction = (
         master_dataset
-        .withColumn("customer_key", F.abs(F.crc32(F.col("customer_id").cast("binary"))))
+        .withColumn("customer_key", F.abs(F.xxhash64("customer_id")))
         .withColumn("article_key", F.col("article_id"))
         .withColumn("date_key", F.date_format("t_dat", "yyyyMMdd").cast("int"))
         .select("customer_key", "article_key", "date_key", "price", "sales_channel_id")
@@ -134,7 +126,7 @@ if args.source == "csv":
 # --- Marts dérivés ---
 customers_features_train_wh = (
     customers_features_train
-    .withColumn("customer_key", F.abs(F.crc32(F.col("customer_id").cast("binary"))))
+    .withColumn("customer_key", F.abs(F.xxhash64("customer_id")))
     .drop("customer_id")
 )
 
