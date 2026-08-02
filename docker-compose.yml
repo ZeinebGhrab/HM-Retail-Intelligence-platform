@@ -43,6 +43,8 @@ services:
 
       KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
 
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:29092,PLAINTEXT_HOST://0.0.0.0:9092
+
       KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092
 
       KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
@@ -50,10 +52,66 @@ services:
       KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
 
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
-
     networks:
       - shop_data_net
 
+  kafka-producer-api:
+    build:
+      context: ./kafka
+    container_name: shop-producer-api
+    restart: unless-stopped
+    ports:
+      - "8090:8090"
+    volumes:
+      - ./data/raw/daily:/data/daily
+    env_file:
+      - .env
+    networks:
+      - shop_data_net
+    
+ # ============================================================
+# KAFKA TOPIC INITIALIZATION
+# ============================================================
+
+  kafka-init:
+
+    image: confluentinc/cp-kafka:7.5.3
+
+    container_name: shop-kafka-init
+
+    restart: "no"
+
+    depends_on:
+      - kafka
+
+    command:
+      - bash
+      - -c
+      - |
+          echo "Waiting for Kafka broker..."
+
+          until kafka-topics \
+            --bootstrap-server kafka:29092 \
+            --list >/dev/null 2>&1
+          do
+            echo "Kafka not ready, waiting..."
+            sleep 5
+          done
+
+          echo "Kafka is ready"
+
+          kafka-topics \
+            --bootstrap-server kafka:29092 \
+            --create \
+            --if-not-exists \
+            --topic transactions.raw \
+            --partitions 3 \
+            --replication-factor 1
+
+          echo "Topic transactions.raw created"
+
+    networks:
+      - shop_data_net
 # ============================================================
 # POSTGRESQL
 # ============================================================
@@ -102,7 +160,20 @@ services:
       - "8081:8080"
     networks:
       - shop_data_net
-
+  grafana:
+    image: grafana/grafana:latest
+    container_name: shop-grafana
+    restart: unless-stopped
+    ports:
+      - "3001:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=hm_admin
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning
+    networks:
+      - shop_data_net
 # ============================================================
 # SPARK MASTER
 # ============================================================
@@ -111,7 +182,7 @@ services:
 
     build:
       context: ./spark
-
+    restart: unless-stopped
     container_name: shop-spark-master
 
     hostname: spark-master
@@ -137,11 +208,12 @@ services:
 
     volumes:
 
-      - ./data:/opt/spark/work-dir/data
+      -  ./data:/opt/spark/work-dir/data
+      - ./spark:/opt/spark/work-dir/spark
 
-      - ./spark/jobs:/opt/spark/work-dir/jobs
+      # - ./spark/jobs:/opt/spark/work-dir/jobs
 
-      - ./spark/utils:/opt/spark/work-dir/utils
+      # - ./spark/utils:/opt/spark/work-dir/utils
 
     depends_on:
       postgres:
@@ -162,7 +234,7 @@ services:
     container_name: shop-spark-worker
 
     hostname: spark-worker
-
+    restart: unless-stopped
     depends_on:
       - spark-master
 
@@ -174,18 +246,214 @@ services:
     environment:
       SPARK_MASTER_URL: spark://spark-master:7077
 
-      SPARK_WORKER_MEMORY: 2G
+      SPARK_WORKER_MEMORY: 6G
 
-      SPARK_WORKER_CORES: 2
+      SPARK_WORKER_CORES: 6
 
     volumes:
 
       - ./data:/opt/spark/work-dir/data
 
-      - ./spark/jobs:/opt/spark/work-dir/jobs
-
-      - ./spark/utils:/opt/spark/work-dir/utils
+      - ./spark:/opt/spark/work-dir/spark
       # - ./.env:/opt/spark/work-dir/.env 
+
+    networks:
+      - shop_data_net
+# ============================================================
+# spark-streaming-job
+# ============================================================
+
+  # spark-streaming-job:
+  #   build:
+  #     context: ./spark
+  #   container_name: shop-spark-streaming
+  #   restart: unless-stopped
+  #   depends_on:
+  #     - kafka
+  #     - spark-master
+  #   env_file:
+  #     - .env
+  #   volumes:
+  #     - ./data:/opt/spark/work-dir/data
+  #     - ./spark/common:/opt/spark/work-dir/common
+  #     - ./spark:/opt/spark/work-dir/spark
+  #     - streaming_checkpoint:/opt/spark/work-dir/checkpoint
+  #   networks:
+  #     - shop_data_net
+
+
+# ============================================================
+# SPARK WORKER STREAMING
+# ============================================================
+
+#   spark-worker-streaming:
+
+#     build:
+#       context: ./spark
+
+#     container_name: shop-spark-worker-streaming
+
+#     hostname: spark-worker-streaming
+
+#     depends_on:
+#       - spark-master
+
+#     command: >
+#       /opt/spark/bin/spark-class
+#       org.apache.spark.deploy.worker.Worker
+#       spark://spark-master:7077
+
+#     env_file:
+#       - .env
+
+#     environment:
+#       SPARK_MASTER_URL: spark://spark-master:7077
+#       SPARK_WORKER_MEMORY: 2G
+#       SPARK_WORKER_CORES: 2
+
+#     volumes:
+#       - ./data:/opt/spark/work-dir/data
+#       - ./spark:/opt/spark/work-dir/spark
+
+#     networks:
+#       - shop_data_net
+
+
+# # ============================================================
+# # SPARK WORKER BATCH
+# # ============================================================
+
+#   spark-worker-batch:
+
+#     build:
+#       context: ./spark
+
+#     container_name: shop-spark-worker-batch
+
+#     hostname: spark-worker-batch
+
+#     depends_on:
+#       - spark-master
+
+#     command: >
+#       /opt/spark/bin/spark-class
+#       org.apache.spark.deploy.worker.Worker
+#       spark://spark-master:7077
+
+#     env_file:
+#       - .env
+
+#     environment:
+#       SPARK_MASTER_URL: spark://spark-master:7077
+#       SPARK_WORKER_MEMORY: 6G
+#       SPARK_WORKER_CORES: 4
+
+#     volumes:
+#       - ./data:/opt/spark/work-dir/data
+#       - ./spark:/opt/spark/work-dir/spark
+
+#     networks:
+#       - shop_data_net
+  # ============================================================
+# SPARK STREAMING JOB
+# ============================================================
+
+  spark-streaming-job:
+
+    build:
+      context: ./spark
+
+    container_name: shop-spark-streaming
+
+    restart: unless-stopped
+
+    depends_on:
+      - kafka
+      - spark-master
+      - spark-worker
+
+    env_file:
+      - .env
+
+    command: >
+      /opt/spark/bin/spark-submit
+      --master spark://spark-master:7077
+      --deploy-mode client
+      --driver-memory 1g
+      --executor-memory 1g
+      --executor-cores 2
+      --total-executor-cores 2
+      /opt/spark/work-dir/spark/streaming_pipeline/jobs/streaming_job.py
+
+
+    volumes:
+
+      - ./data:/opt/spark/work-dir/data
+
+      - ./spark:/opt/spark/work-dir/spark
+
+      - streaming_checkpoint:/opt/spark/work-dir/checkpoint
+
+
+    networks:
+
+      - shop_data_net
+
+  # streaming-api:
+  #   build:
+  #     context: ./spark
+  #     dockerfile: streaming_pipeline/streaming_api.Dockerfile
+
+  #   container_name: shop-streaming-api
+
+  #   ports:
+  #     - "8000:8000"
+
+  #   restart: unless-stopped
+  #   volumes:
+  #     - /var/run/docker.sock:/var/run/docker.sock
+  #   networks:
+  #     - shop_data_net
+# ============================================================
+# spark-job-trigger
+# ============================================================
+  spark-job-trigger:
+    build:
+      context: ./spark
+      dockerfile: job_trigger.Dockerfile
+    image: hm-retail-job-trigger:latest
+    container_name: shop-job-trigger
+    restart: unless-stopped
+    ports:
+      - "8091:8091"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      - shop_data_net
+      # ============================================================
+# generator_api
+# ============================================================
+  generator_api:
+    build:
+      context: ./data/raw/daily
+      dockerfile: Dockerfile
+
+    image: hm-retail-generator-api:latest
+    container_name: shop-job-generator-api
+
+    restart: unless-stopped
+
+    ports:
+      - "8089:8089"
+
+    volumes:
+      - ./data:/data
+      - /var/run/docker.sock:/var/run/docker.sock
+
+    environment:
+      ARTICLES_CSV: /data/raw/articles.csv
+      CUSTOMERS_CSV: /data/raw/customers.csv
+      OUTPUT_DIR: /data/raw/daily
 
     networks:
       - shop_data_net
@@ -353,6 +621,11 @@ volumes:
   qdrant_data:
 
   mlflow_data:
+
+  streaming_checkpoint:
+
+  grafana_data:
+
 
 networks:
 

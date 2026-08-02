@@ -2,7 +2,8 @@
 .env
 
 # Données volumineuses (versionnées via DVC, pas via git — voir ARCHITECTURE.md)
-data/raw/*
+data/raw/*.csv
+data/raw/daily/*.csv
 data/processed/*
 data/features/*
 !data/raw/.gitkeep
