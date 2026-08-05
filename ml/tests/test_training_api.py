@@ -22,7 +22,6 @@ for p in (ML_DIR, ML_DIR / "training"):
 
 import training_api  # noqa: E402
 
-
 # --- Tests unitaires de _check_quality_gate ----------------------------------
 
 @pytest.mark.parametrize(
