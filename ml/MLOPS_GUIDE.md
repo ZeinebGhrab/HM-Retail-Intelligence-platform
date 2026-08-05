@@ -494,7 +494,13 @@ ruff check ml/ --exclude ml/models
 - **La publication de l'image Docker** (`build-serving-image`) n'est pas branchée à un registre
   réel — les lignes sont pré-écrites en commentaire dans le workflow, à activer avec un registre et
   des secrets choisis par l'équipe.
-- **Tests de qualité prédictive** (seuils minimaux de F1/RMSE avant d'autoriser un `--register`)
-  ne sont pas encore automatisés : une prochaine itération pourrait faire échouer
-  `scheduled-retrain` si les métriques d'un nouveau run sont significativement pires que celles du
-  modèle `champion` actuel (comparaison via l'API MLflow `MlflowClient().get_model_version(...)`).
+- ~~Tests de qualité prédictive (seuils minimaux avant `--register`) non automatisés~~ — **résolu** :
+  `ml/training/training_api.py` (`POST /train/<tâche>` et `/train/all`) applique désormais un seuil
+  de qualité absolu par tâche (`QUALITY_GATES` : `f1_macro ≥ 0.20`, `r2_log_target ≥ 0.50`,
+  `silhouette_score ≥ 0.10`) qui bloque toute promotion `champion` en dessous — y compris en
+  l'absence de champion actuel — puis compare au champion existant via l'API MLflow avant de
+  promouvoir. Testé indépendamment dans `ml/tests/test_training_api.py`. Ce endpoint est appelé par
+  le workflow n8n `hm-reentrainement-hebdomadaire.json` (voir `n8n/workflows/README.md`).
+  Reste néanmoins à ajuster : les seuils sont des valeurs de départ volontairement basses (bloquer
+  un modèle clairement cassé, pas exiger de battre le score des notebooks) — à durcir une fois un
+  historique de runs disponible en production.

@@ -47,3 +47,44 @@ class SpendPrediction(BaseModel):
 class HealthResponse(BaseModel):
     status: str
     models_loaded: dict[str, bool]
+
+
+class BatchPredictionRequest(BaseModel):
+    """Corps de /predict/batch. Reprend le format déjà envoyé par le nœud n8n
+    'Appeler l'API modèle (prédiction)' (n8n/workflows/hm-rfm-nocturne-notifications.json)."""
+
+    source_table: str = Field(
+        default="customers_features_train",
+        examples=["customers_features_train"],
+        description="Table PostgreSQL à scorer (produite par spark/jobs/pipeline_hm.py).",
+    )
+    limit: int | None = Field(
+        default=None,
+        ge=1,
+        description=(
+            "Échantillonne au plus N clients avant scoring (utile sur de très gros volumes). "
+            "None (défaut) = scorer toute la table."
+        ),
+        examples=[5000],
+    )
+
+
+class BatchPredictionSummary(BaseModel):
+    """Résumé agrégé d'un scoring en masse des 3 modèles sur `source_table`.
+
+    Volontairement agrégé plutôt que ligne-par-ligne : cet endpoint alimente le
+    résumé quotidien généré par Ollama (workflow n8n 'hm-rfm-nocturne-notifications'),
+    pas un export de prédictions individuelles.
+    """
+
+    generated_at: str
+    source_table: str
+    n_customers_scored: int
+    club_status_distribution: dict[str, int]
+    dominant_club_status: str
+    segment_distribution: dict[str, int]
+    dominant_segment: int
+    predicted_spend_mean: float
+    predicted_spend_median: float
+    predicted_spend_total: float
+    model_versions: dict[str, str]

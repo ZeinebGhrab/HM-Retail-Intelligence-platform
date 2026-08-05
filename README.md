@@ -1,5 +1,10 @@
 # H&M Retail Intelligence Platform
 
+<p align="center">
+  <a href="./README.md"><strong>🇫🇷 Français</strong></a> ·
+  <a href="./README.en.md">🇬🇧 English</a>
+</p>
+
 Plateforme data & IA construite autour du dataset Kaggle **H&M Personalized Fashion
 Recommendations**. Ce README ne décrit **que ce qui est réellement implémenté et fonctionnel
 aujourd'hui**, avec une explication claire de son fonctionnement. Les briques non implémentées sont
@@ -82,7 +87,9 @@ régression de la dépense totale, segmentation client), rejoués de façon scri
    modèle) — avec `--register` pour l'enregistrer en plus dans le **Model Registry**.
 3. `ml/serving/app.py` (API FastAPI) charge le modèle marqué avec l'alias `champion` dans le
    Registry, ou à défaut une copie locale dans `ml/models/`, et expose 3 routes de prédiction
-   (`/predict/club-status`, `/predict/segment`, `/predict/spend`) plus `/health`.
+   unitaire (`/predict/club-status`, `/predict/segment`, `/predict/spend`), une route de scoring
+   en masse (`/predict/batch` — score toute une table Postgres et retourne un résumé agrégé,
+   utilisée par le workflow n8n `hm-rfm-nocturne-notifications`, voir §1.5), plus `/health`.
 4. `ml/monitoring/drift_report.py` compare une fenêtre de référence et une fenêtre courante de
    `customers_features_train` (Evidently AI) et génère un rapport HTML de dérive.
 5. `.github/workflows/mlops-ci.yml` fait tourner lint + tests à chaque push, construit l'image
@@ -92,7 +99,43 @@ régression de la dépense totale, segmentation client), rejoués de façon scri
 **Détail complet, avec toutes les commandes** : [`ml/MLOPS_GUIDE.md`](./ml/MLOPS_GUIDE.md) — c'est
 le document le plus détaillé du dépôt, à lire en premier pour tout ce qui concerne le ML.
 
-### 1.5 Infrastructure Docker — `docker-compose.yml`
+### 1.5 Le pipeline streaming & l'orchestration — `kafka/` + `n8n/`
+
+**Ce que c'est** : un second flux, indépendant du batch décrit en §1.3, qui ingère les transactions
+au fil de l'eau via Kafka, et 3 workflows n8n qui planifient l'ensemble du pipeline (batch + streaming
++ ré-entraînement).
+
+**Comment ça fonctionne** :
+1. `kafka/producers/transactions_producer.py` (exposé via `kafka/producers/producer_api.py`, port
+   `8090`) lit un CSV journalier (`data/raw/daily/`, généré par `data/raw/daily/generator_api.py`)
+   et publie chaque transaction sur le topic Kafka `transactions.raw`.
+2. `spark/streaming_pipeline/jobs/streaming_job.py` consomme ce topic en continu, valide chaque
+   message et écrit les lignes valides/rejetées dans PostgreSQL (`stream_transactions_ingested` /
+   `stream_transactions_rejected`).
+3. `spark/batch_ml_pipeline/jobs/merge_stream_to_warehouse.py` fusionne ensuite ces données
+   streaming dans l'entrepôt (`fact_transaction`, `dim_date`), avec un suivi de watermark pour ne
+   traiter que les nouvelles lignes.
+4. Trois workflows n8n orchestrent le tout, désormais **séparés en 3 fichiers indépendants** dans
+   [`n8n/workflows/`](./n8n/workflows/) :
+   - [`hm-simulation-quotidienne-kafka.json`](./n8n/workflows/hm-simulation-quotidienne-kafka.json)
+     — génère les transactions du jour et déclenche le producer Kafka (tous les jours à 06:00).
+   - [`hm-rfm-nocturne-notifications.json`](./n8n/workflows/hm-rfm-nocturne-notifications.json)
+     — fusionne le streaming dans l'entrepôt, recalcule le RFM, génère un résumé via Ollama et le
+     diffuse (tous les jours à 02:00).
+   - [`hm-reentrainement-hebdomadaire.json`](./n8n/workflows/hm-reentrainement-hebdomadaire.json)
+     — ré-entraîne les 3 modèles ML et recharge `ml-serving` (chaque lundi à 06:00).
+
+   Détail complet de chaque nœud : [`n8n/workflows/README.md`](./n8n/workflows/README.md).
+
+**Important — ce qui n'est PAS branché dans ce flux** : le workflow `hm-rfm-nocturne-notifications`
+appelle des endpoints (`Push SSE → Django`, `Envoyer au Chatbot`, `Envoyer FCM`) qui pointent vers un
+backend Django, un chatbot et un service FCM **absents de ce dépôt** — ce sont des intégrations
+prévues pour un autre projet (`ShopAnalytics`), pas du code qui existe ici. De même, `ollama`
+(utilisé pour générer le résumé texte) et `qdrant` (base vectorielle) démarrent via Docker, mais
+seul `ollama` est réellement appelé par ce workflow ; `qdrant` ne reçoit aucune donnée nulle part
+dans le dépôt actuel.
+
+### 1.6 Infrastructure Docker — `docker-compose.yml`
 
 **Ce que c'est** : l'orchestration de tous les conteneurs nécessaires aux parties implémentées
 ci-dessus (et de quelques briques d'infrastructure prêtes mais pas encore connectées à du code
@@ -121,7 +164,7 @@ présents dans `docker-compose.yml` mais pas encore consommés par du code appli
 ./run.sh status              # vérifier que les conteneurs tournent
 ```
 
-### 1.6 Résumé : démarrage rapide du flux réellement implémenté
+### 1.7 Résumé : démarrage rapide du flux réellement implémenté
 
 ```bash
 # 0. Configuration
@@ -163,11 +206,12 @@ fonctionnalités opérationnelles :
 
 | Dossier / service | État réel |
 |---|---|
-| `kafka/producers/`, `kafka/consumers/` | Dossiers vides. Le service Docker `kafka` démarre, mais rien ne publie ni ne consomme de messages : le pipeline Spark actuel lit directement les CSV, pas de flux Kafka. |
-| `n8n/workflows/` | Dossier vide. Le service `n8n` démarre, mais aucun workflow n'y est défini. |
+| `kafka/consumers/` | Dossier vide (le "consommateur" réel est le job Spark `spark/streaming_pipeline/jobs/streaming_job.py`, voir §1.5) — rien à ajouter ici sauf besoin d'un consumer Kafka autonome. |
 | `backend/app/` | Dossier vide. Aucune API applicative n'existe entre un frontend et les données/modèles. |
-| `frontend/src/` | Dossier vide. Aucune interface utilisateur (dashboard, chatbot) n'existe. |
-| Chatbot RAG (`ollama` + `qdrant`) | Les services Docker démarrent, mais rien ne les connecte à une base de connaissances ni à un frontend — le notebook 04 prépare des données qui *pourraient* servir à ce RAG, mais aucun code ne les y branche actuellement. |
+| `frontend/src/` | Dossier vide. Aucune interface utilisateur (dashboard) n'existe. |
+| Chatbot RAG (`ollama` + `qdrant`) | Les services Docker démarrent. `ollama` est réellement appelé par le workflow n8n `hm-rfm-nocturne-notifications` (génération de résumé texte), mais `qdrant` ne reçoit aucune donnée : pas d'ingestion, pas de collection créée, pas de recherche vectorielle branchée à un frontend. Le notebook 04 prépare des données qui *pourraient* alimenter ce RAG, mais aucun code ne les y branche actuellement. |
+| Nœuds n8n `Push SSE → Django`, `Envoyer au Chatbot`, `Envoyer FCM` | Présents dans `hm-rfm-nocturne-notifications.json`, mais pointent vers un backend Django, un chatbot et un service FCM qui n'existent pas dans ce dépôt (intégrations prévues pour le projet `ShopAnalytics`). |
+| `.env.example` | Absent du dépôt, alors que `docker-compose.yml` et ce README s'appuient dessus (`cp .env.example .env`). À créer avant tout premier démarrage. |
 | `data/processed/`, `data/features/` | Dossiers hérités d'une version antérieure du pipeline, non alimentés par le code actuel. |
 | Remote DVC/DagsHub | `.dvc/config` contient un gabarit d'URL, pas encore pointé vers un vrai dépôt DagsHub. |
 
@@ -191,9 +235,13 @@ hm-retail-intelligence-platform/
 ├── data/raw/                    # ✅ utilisé — CSV Kaggle bruts
 ├── data/processed/, data/features/  # ❌ non utilisés par le code actuel
 ├── spark/                       # ✅ implémenté — pipeline batch → PostgreSQL (voir §1.3)
+│                                 #    + pipeline streaming (voir §1.5)
 ├── ml/                           # ✅ implémenté — entraînement, MLflow, API, monitoring (voir §1.4)
-├── kafka/                        # 📂 réservé — Dockerfile prêt, producers/consumers vides
-├── n8n/workflows/                # 📂 réservé — vide
+├── kafka/                        # ✅ implémenté — producer + API (voir §1.5) ; consumers/ vide (§2)
+├── n8n/workflows/                # ✅ implémenté — 3 workflows séparés (voir §1.5)
+│   ├── hm-simulation-quotidienne-kafka.json
+│   ├── hm-rfm-nocturne-notifications.json
+│   └── hm-reentrainement-hebdomadaire.json
 ├── backend/app/                  # 📂 réservé — vide
 └── frontend/src/                 # 📂 réservé — vide
 ```
@@ -206,6 +254,8 @@ hm-retail-intelligence-platform/
   Docker, distinction implémenté / non implémenté.
 - [`spark/README.md`](./spark/README.md) — pipeline Spark → PostgreSQL en détail (schéma en étoile,
   Data Marts, lancement du job).
+- [`n8n/workflows/README.md`](./n8n/workflows/README.md) — détail des 3 workflows n8n (nœuds,
+  déclencheurs, services appelés, limites connues).
 - [`ml/MLOPS_GUIDE.md`](./ml/MLOPS_GUIDE.md) — guide complet de la partie ML/MLOps : entraînement,
   MLflow, API de service, monitoring, CI/CD, DVC.
 - [`notebooks/README.md`](./notebooks/README.md) — ordre d'exécution des notebooks, mode d'emploi.

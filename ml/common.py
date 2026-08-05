@@ -108,7 +108,11 @@ def get_postgres_engine(config: dict[str, Any]):
     return create_engine(url)
 
 
-def load_customer_features(config: dict[str, Any], path: str | Path | None = None) -> pd.DataFrame:
+def load_customer_features(
+    config: dict[str, Any],
+    path: str | Path | None = None,
+    table_override: str | None = None,
+) -> pd.DataFrame:
     """
     Charge la table `customers_features_train` depuis PostgreSQL (sortie de
     spark/jobs/pipeline_hm.py, voir spark/README.md).
@@ -118,11 +122,15 @@ def load_customer_features(config: dict[str, Any], path: str | Path | None = Non
     un CSV existant (repli explicite, ex. export manuel), un jeu de données
     synthétique de même schéma est généré à la place. Un WARNING est émis pour
     ne jamais confondre ce mode avec un entraînement sur données réelles.
+
+    `table_override` permet de cibler une autre table que celle de la config
+    (ex. `source_table` envoyé par le corps de POST /predict/batch, voir
+    ml/serving/app.py) sans muter `config["postgres"]["features_table"]`.
     """
     if path is not None and Path(path).exists():
         return pd.read_csv(path)
 
-    table = config["postgres"]["features_table"]
+    table = table_override or config["postgres"]["features_table"]
     try:
         engine = get_postgres_engine(config)
         df = pd.read_sql(f"SELECT * FROM {table}", engine)
