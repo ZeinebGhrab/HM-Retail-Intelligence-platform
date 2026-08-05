@@ -147,6 +147,32 @@ def health() -> HealthResponse:
     return HealthResponse(status="ok", models_loaded=statuses)
 
 
+@app.post("/admin/reload-models")
+def reload_models(task: str | None = None) -> dict[str, Any]:
+    """Vide le cache mémoire (`_REGISTRY`) pour forcer le rechargement du modèle
+    "champion" au prochain appel de /predict/*.
+
+    Nécessaire car `_get_bundle` ne recharge un modèle qu'une seule fois par
+    processus (cf. commentaire sur `_REGISTRY` plus haut) : sans cet endpoint,
+    un nouveau champion promu par ml/training/training_api.py (voir
+    ml/MLOPS_GUIDE.md §10) ne serait pris en compte qu'après un redémarrage
+    manuel de ce service. Appelé par le workflow n8n juste après un
+    ré-entraînement (n8n/workflows/HM Streaming Pipeline.json).
+
+    Sans paramètre : vide tout le cache. Avec `?task=classification` (ou
+    `regression`/`clustering`) : ne vide que l'entrée correspondante.
+    """
+    if task is not None:
+        if task not in ("classification", "regression", "clustering"):
+            raise HTTPException(status_code=404, detail=f"Tâche inconnue : {task}")
+        removed = _REGISTRY.pop(task, None) is not None
+        return {"status": "ok", "cleared": [task] if removed else []}
+
+    cleared = list(_REGISTRY.keys())
+    _REGISTRY.clear()
+    return {"status": "ok", "cleared": cleared}
+
+
 @app.post("/predict/club-status", response_model=ClubStatusPrediction)
 def predict_club_status(features: BehaviorFeatures) -> ClubStatusPrediction:
     bundle = _get_bundle("classification", CONFIG["classification"]["model_name"])
