@@ -21,7 +21,12 @@ from sklearn.metrics import silhouette_score
 from sklearn.preprocessing import StandardScaler
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from common import configure_mlflow, load_config, load_customer_features, models_dir  # noqa: E402
+from common import (  # noqa: E402
+    configure_mlflow,
+    load_config,
+    load_customer_features,
+    models_dir,
+)
 
 
 def train(config_path: str | None = None, register: bool = False) -> dict:

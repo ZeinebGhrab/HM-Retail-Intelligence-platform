@@ -1,0 +1,30 @@
+# Configuration ruff (voir .github/workflows/mlops-ci.yml, job lint-and-test :
+# `ruff check ml/ --exclude ml/models`).
+#
+# Sans ce fichier, ruff active son jeu de règles par défaut qui inclut des
+# catégories que ce projet ne respecte pas intentionnellement — notamment
+# BLE001 (interdit `except Exception`), alors que ml/common.py, ml/serving/app.py
+# et ml/training/training_api.py s'appuient volontairement sur des captures
+# larges pour leur logique de repli (MLflow ou Postgres indisponible →
+# dégradation gracieuse plutôt que crash). On restreint donc explicitement
+# la sélection au socle par défaut habituel de ruff (E4/E7/E9 + F, cf. sa
+# documentation) plus I (tri des imports) :
+#   - E4/E7/E9 : sous-ensemble de pycodestyle (imports, syntaxe, erreurs) —
+#     volontairement PAS "E" en entier, qui inclurait E501 (ligne trop
+#     longue) et casserait sur la quasi-totalité des commentaires détaillés
+#     en français de ce dépôt (docstrings expliquant les choix du notebook,
+#     des scripts train_*.py, etc.)
+#   - F     : pyflakes (variables non utilisées, imports morts...)
+#   - I     : tri des imports (isort)
+# E402 ("import pas en haut du fichier") est désactivé car les scripts sous
+# ml/ (train_*.py, ml/serving/app.py, ml/training/training_api.py,
+# ml/monitoring/drift_report.py) font `sys.path.insert(...)` avant leurs
+# imports locaux pour fonctionner à la fois en local et en conteneur — cf.
+# les commentaires à côté de chaque `sys.path.insert`.
+
+extend-exclude = ["ml/models"]
+target-version = "py311"
+
+[lint]
+select = ["E4", "E7", "E9", "F", "I"]
+ignore = ["E402"]

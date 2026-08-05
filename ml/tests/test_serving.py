@@ -32,9 +32,8 @@ def client(monkeypatch):
     # MLflow récent) contrairement à une adresse réseau injoignable, qui peut
     # traîner plusieurs dizaines de secondes en retries HTTP avant d'échouer.
     monkeypatch.setenv("MLFLOW_TRACKING_URI", "file:///tmp/hm_mlops_test_unreachable")
-    from fastapi.testclient import TestClient
-
     import app as app_module
+    from fastapi.testclient import TestClient
 
     app_module._REGISTRY.clear()
     return TestClient(app_module.app)
