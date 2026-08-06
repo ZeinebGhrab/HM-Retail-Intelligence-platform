@@ -1,70 +1,87 @@
 # Streaming Pipeline — H&M
 
-Ce README explique en détail le pipeline **temps réel** : ce que fait chaque fichier, comment il s'articule avec Docker, et pourquoi il fonctionne différemment du pipeline batch.
+<p align="center">
+  <a href="./README.md"><strong>🇬🇧 English</strong></a> ·
+  <a href="./README.fr.md">🇫🇷 Français</a>
+</p>
 
-Si vous n'avez jamais touché à ce dossier, lisez d'abord la section 1 (Batch vs Streaming) avant le reste — c'est la clé pour comprendre pourquoi ce code est écrit ainsi.
+This README explains the **real-time** pipeline in detail: what each file does, how it fits
+together with Docker, and why it works differently from the batch pipeline.
 
-Ce fichier couvre uniquement l'ingestion temps réel, jusqu'à l'écriture dans `stream_transactions_ingested`. Ce qui se passe **après** (fusion périodique dans le Data Warehouse, recalcul RFM nocturne, appel du modèle) est orchestré par n8n et détaillé dans le [README principal, section 7](../../README.md#7-orchestration-n8n--cycle-complet) — voir aussi la section 9 ci-dessous pour le lien entre les deux.
+If you've never touched this folder before, read section 1 (Batch vs Streaming) first before the
+rest — it's the key to understanding why this code is written the way it is.
+
+This file covers only real-time ingestion, up to the write into `stream_transactions_ingested`.
+What happens **after** that (periodic merge into the Data Warehouse, nightly RFM recomputation,
+model call) is orchestrated by n8n and detailed in the [main README, section
+6](../README.md#6-n8n-orchestration--full-cycle) — see also section 9 below for the link between
+the two.
 
 ---
 
-## 1. Batch vs Streaming — deux fonctionnements totalement différents
+## 1. Batch vs Streaming — two entirely different ways of working
 
-Un pipeline batch et un pipeline streaming ne fonctionnent pas de la même manière.
+A batch pipeline and a streaming pipeline don't work the same way.
 
-### 1.1 Pipeline Batch (`spark/batch_ml_pipeline/`)
+### 1.1 Batch pipeline (`spark/batch_ml_pipeline/`)
 
-Le pipeline batch traite les données **par lots**.
+The batch pipeline processes data **in batches**.
 
-Exemple :
-- Jour 1 → un nouveau fichier CSV arrive → n8n lance `spark-submit`.
-- Spark traite le fichier puis **s'arrête**.
-- Jour 2 → un autre fichier arrive → n8n **relance** `spark-submit`.
-- Spark traite le nouveau fichier puis s'arrête à nouveau.
+Example:
+- Day 1 → a new CSV file arrives → n8n launches `spark-submit`.
+- Spark processes the file then **stops**.
+- Day 2 → another file arrives → n8n **relaunches** `spark-submit`.
+- Spark processes the new file then stops again.
 
-À chaque nouveau lot de données, **n8n doit redémarrer le job Spark**.
+For every new batch of data, **n8n has to restart the Spark job**.
 
-### 1.2 Pipeline Streaming (`spark/streaming_pipeline/`)
+### 1.2 Streaming pipeline (`spark/streaming_pipeline/`)
 
-Le pipeline streaming fonctionne différemment.
+The streaming pipeline works differently.
 
-Au démarrage :
-- n8n (ou Docker) lance **une seule fois** le job Spark Structured Streaming.
-- Ensuite, ce job **reste toujours en fonctionnement**.
+At startup:
+- n8n (or Docker) launches the Spark Structured Streaming job **once**.
+- After that, this job **keeps running forever**.
 
-Pendant qu'il tourne, Spark écoute en permanence le topic Kafka. Dès que Kafka reçoit de nouveaux messages :
-- Spark les détecte automatiquement.
-- Il les traite dans un micro-batch (par exemple toutes les 30 secondes).
-- Puis il attend les prochains messages.
-- Il ne s'arrête jamais.
+While it runs, Spark continuously listens to the Kafka topic. As soon as Kafka receives new
+messages:
+- Spark detects them automatically.
+- It processes them in a micro-batch (e.g. every 30 seconds).
+- Then it waits for the next messages.
+- It never stops.
 
-Il n'est donc **pas nécessaire que n8n relance Spark** à chaque arrivée de nouvelles données — contrairement au batch.
+So n8n **doesn't need to relaunch Spark** every time new data arrives — unlike batch.
 
-### 1.3 En résumé
+### 1.3 Summary
 
 | | Batch | Streaming |
 |---|---|---|
-| Déclenchement | n8n relance `spark-submit` à chaque nouveau fichier | Lancé une seule fois par Docker Compose (`restart: unless-stopped`) |
-| Durée de vie du job | Se termine après chaque exécution | Ne se termine jamais |
-| Détection de nouvelles données | Attend d'être relancé | Écoute Kafka en continu, réagit automatiquement |
-| Écriture PostgreSQL | `mode("overwrite")` — recrée la table | `mode("append")` — ajoute sans jamais effacer |
-| Rôle de n8n | Orchestrateur actif (relance le job) | Simple notificateur au démarrage (le job tourne déjà seul) — n8n reprend ensuite la main en aval, à intervalles réguliers, pour fusionner et exploiter les données produites (voir section 9) |
+| Trigger | n8n relaunches `spark-submit` for every new file | Launched once by Docker Compose (`restart: unless-stopped`) |
+| Job lifetime | Ends after each run | Never ends |
+| Detecting new data | Waits to be relaunched | Continuously listens to Kafka, reacts automatically |
+| PostgreSQL write | `mode("overwrite")` — recreates the table | `mode("append")` — adds without ever erasing |
+| n8n's role | Active orchestrator (relaunches the job) | Simple startup notifier (the job already runs on its own) — n8n then takes back over downstream, at regular intervals, to merge and use the produced data (see section 9) |
 
 ---
 
-## 2. Le Dockerfile
+## 2. The Dockerfile
 
-Le pipeline streaming utilise la **même image Docker Spark** que le pipeline batch (un seul `Dockerfile`, à la racine du projet) — pas de duplication d'image. La seule différence est la **commande** lancée au démarrage du conteneur (voir docker-compose ci-dessous) et un package Spark supplémentaire nécessaire pour lire Kafka :
+The streaming pipeline uses the **same Spark Docker image** as the batch pipeline (a single
+`Dockerfile`, at the project root) — no image duplication. The only difference is the **command**
+launched when the container starts (see docker-compose below) and one extra Spark package needed
+to read Kafka:
 
 ```
 --packages org.apache.spark:spark-sql-kafka-0-10_2.12:3.5.1
 ```
 
-Ce package n'est pas installé dans l'image au moment du build : il est téléchargé par Spark au lancement du job, via l'option `--packages` de `spark-submit`. C'est le connecteur qui permet à `spark.readStream.format("kafka")` de fonctionner.
+This package isn't installed in the image at build time: it's downloaded by Spark when the job
+launches, via `spark-submit`'s `--packages` option. It's the connector that lets
+`spark.readStream.format("kafka")` work.
 
 ---
 
-## 3. Le service dans `docker-compose.yml`
+## 3. The service in `docker-compose.yml`
 
 ```yaml
   spark-streaming-job:
@@ -91,42 +108,49 @@ Ce package n'est pas installé dans l'image au moment du build : il est téléch
       - shop_data_net
 ```
 
-**Points clés de cette configuration :**
+**Key points of this configuration:**
 
-- `restart: unless-stopped` : si le conteneur crashe ou si la machine redémarre, Docker le relance automatiquement — indispensable pour un processus censé tourner en permanence.
-- `depends_on: kafka, spark-master` : le job a besoin que Kafka et le cluster Spark soient déjà démarrés.
-- Le volume `streaming_checkpoint` (à déclarer aussi dans la section `volumes:` racine du `docker-compose.yml`) est **essentiel** : c'est là que Spark enregistre sa progression (quels messages Kafka ont déjà été traités). Sans ce volume persistant, un redémarrage du conteneur ferait perdre cette progression et retraiterait ou sauterait des données.
-- C'est un conteneur **séparé** de `spark-master`/`spark-worker` : ces derniers restent dédiés au batch, pour ne pas mélanger les deux charges de travail.
+- `restart: unless-stopped`: if the container crashes or the machine reboots, Docker restarts it
+  automatically — essential for a process meant to run permanently.
+- `depends_on: kafka, spark-master`: the job needs Kafka and the Spark cluster to already be
+  running.
+- The `streaming_checkpoint` volume (also to be declared in the root `volumes:` section of
+  `docker-compose.yml`) is **essential**: it's where Spark records its progress (which Kafka
+  messages have already been processed). Without this persistent volume, a container restart
+  would lose this progress and either reprocess or skip data.
+- It's a container **separate** from `spark-master`/`spark-worker`: those stay dedicated to batch,
+  so the two workloads don't mix.
 
 ---
 
-## 4. `spark/common/config.py` — configuration partagée
+## 4. `spark/common/config.py` — shared configuration
 
-| Fonction | Rôle |
+| Function | Role |
 |---|---|
-| `get_spark_session(app_name)` | Crée la `SparkSession`, connectée au cluster (`spark://spark-master:7077`), avec le driver JDBC PostgreSQL chargé. |
-| `get_jdbc_config()` | Retourne l'URL JDBC (`jdbc:postgresql://postgres:5432/...`) et les identifiants de connexion. |
-| `get_kafka_config()` | Retourne l'adresse interne Docker de Kafka (`kafka:29092` — **pas** `localhost:9092`, qui n'est valide que depuis la machine hôte) et le nom du topic (`transactions.raw`, lu depuis `.env`). |
+| `get_spark_session(app_name)` | Creates the `SparkSession`, connected to the cluster (`spark://spark-master:7077`), with the PostgreSQL JDBC driver loaded. |
+| `get_jdbc_config()` | Returns the JDBC URL (`jdbc:postgresql://postgres:5432/...`) and connection credentials. |
+| `get_kafka_config()` | Returns Kafka's internal Docker address (`kafka:29092` — **not** `localhost:9092`, which is only valid from the host machine) and the topic name (`transactions.raw`, read from `.env`). |
 
 ---
 
 ## 5. `spark/streaming_pipeline/utils/validation.py`
 
-C'est la porte d'entrée des données : tout message Kafka passe par ce fichier avant d'être considéré comme exploitable.
+This is the data's entry gate: every Kafka message passes through this file before being
+considered usable.
 
-### Schéma global du fichier
+### File overview diagram
 
 ```
 Kafka
    │
    ▼
-Message JSON brut
+Raw JSON message
    │
    ▼
 parse_kafka_messages()
    │
    ▼
-DataFrame avec colonnes Spark
+DataFrame with Spark columns
    │
    ▼
 split_valid_invalid()
@@ -134,89 +158,126 @@ split_valid_invalid()
       ├──────────────► valid_df
       │                  │
       │                  ▼
-      │        Pipeline Streaming
-      │        (jointure + écriture)
+      │        Streaming Pipeline
+      │        (join + write)
       │
       ▼
 rejected_df
       │
       ▼
-Dead Letter Queue / Table des rejets
+Dead Letter Queue / Rejects table
 ```
 
-### Les deux fonctions
+### The two functions
 
 **`parse_kafka_messages(raw_stream_df)`**
-Kafka livre toujours son contenu (`value`) sous forme binaire brute — Spark ne sait pas encore que ce binaire est du JSON représentant une transaction. Cette fonction :
-1. Convertit `value` en chaîne de caractères (`CAST(value AS STRING)`).
-2. Parse cette chaîne JSON selon `kafka_message_schema` (défini en haut du fichier) via `from_json()`.
-3. "Éclate" le résultat en colonnes Spark normales (`t_dat`, `customer_id`, `article_id`, `price`, `sales_channel_id`), en conservant aussi `kafka_timestamp` (l'heure d'arrivée du message, utile pour du débogage ou de la traçabilité).
+Kafka always delivers its content (`value`) as raw binary — Spark doesn't yet know that this
+binary is JSON representing a transaction. This function:
+1. Converts `value` into a string (`CAST(value AS STRING)`).
+2. Parses this JSON string against `kafka_message_schema` (defined at the top of the file) via
+   `from_json()`.
+3. "Explodes" the result into normal Spark columns (`t_dat`, `customer_id`, `article_id`, `price`,
+   `sales_channel_id`), also keeping `kafka_timestamp` (the message's arrival time, useful for
+   debugging or traceability).
 
 **`split_valid_invalid(parsed_df)`**
-Un flux temps réel n'est jamais garanti propre — contrairement au dataset Kaggle figé du batch, un message Kafka peut être corrompu, incomplet, ou envoyé par un producteur buggé. Cette fonction :
-1. Définit une condition `is_valid` (aucun champ obligatoire manquant, prix strictement positif, date présente).
-2. Retourne **deux** DataFrames séparés : `valid_df` (transactions exploitables, avec la date déjà convertie en type `Date`) et `rejected_df` (tout le reste, avec une colonne `rejection_reason` ajoutée).
+A real-time stream is never guaranteed to be clean — unlike the batch's fixed Kaggle dataset, a
+Kafka message can be corrupted, incomplete, or sent by a buggy producer. This function:
+1. Defines an `is_valid` condition (no required field missing, strictly positive price, date
+   present).
+2. Returns **two** separate DataFrames: `valid_df` (usable transactions, with the date already
+   converted to `Date` type) and `rejected_df` (everything else, with a `rejection_reason` column
+   added).
 
-**Pourquoi séparer plutôt que filtrer silencieusement ?** Si on se contentait de supprimer les messages invalides (`filter(is_valid)` sans garder l'autre branche), on perdrait toute visibilité sur les problèmes du producteur ou du flux — un bug qui invaliderait 30% des messages passerait inaperçu. En gardant `rejected_df` et en l'écrivant dans une table dédiée (`stream_transactions_rejected`, voir plus bas), on obtient une vraie **Dead Letter Queue** : les données rejetées restent consultables pour investigation, sans jamais bloquer le traitement du flux principal.
-
----
-
-
-## 6. `spark/streaming_pipeline/jobs/streaming_job.py` — le chef d'orchestre
-
-C'est le script principal, celui lancé par `spark-submit` dans `docker-compose.yml`. Il enchaîne, dans l'ordre :
-
-1. **Chargement des dimensions statiques** (`customers_static`, `articles_static`) — une seule fois, au démarrage.
-2. **Lecture du flux Kafka** (`spark.readStream.format("kafka")...load()`), avec `startingOffsets: "latest"` — au (re)démarrage du job, on ne relit **pas** tout l'historique du topic (sinon chaque redémarrage réinjecterait des milliers de transactions déjà traitées).
-3. **Validation** (`parse_kafka_messages` + `split_valid_invalid`, voir section 5).
-4. **Écriture en continu**, via deux fonctions appelées à chaque micro-batch (`foreachBatch`) :
-   - `write_batch_to_postgres` → écrit les transactions valides 
-   - `stream_transactions_ingested` (mode `append`).
-   - `write_rejected_to_postgres` → écrit les messages invalides dans `stream_transactions_rejected` (mode `append`).
-5. **`spark.streams.awaitAnyTermination()`** : maintient le script en vie indéfiniment, tant qu'aucune des deux requêtes streaming ne s'arrête — c'est cette ligne qui fait que le job "ne s'arrête jamais" (section 1.2).
-
-**Pourquoi une table `stream_transactions_ingested` séparée du Data Warehouse batch (`fact_transaction`) ?** Pour ne jamais faire courir de risque au Data Warehouse déjà validé par le pipeline batch. Un job streaming, par nature moins contrôlé qu'un batch sur données figées, écrit dans sa propre table d'atterrissage. La fusion entre les deux est traitée à part, par un job dédié (`merge_stream_to_warehouse.py`) hors de ce pipeline — voir section 9.
-
-**Pourquoi un `checkpointLocation` différent pour `valid` et `rejected` ?** Chaque requête streaming (`writeStream`) a sa propre progression à suivre indépendamment — mélanger les checkpoints des deux flux dans le même dossier créerait des conflits de suivi d'offsets.
+**Why split instead of silently filtering?** If we just dropped invalid messages
+(`filter(is_valid)` without keeping the other branch), we'd lose all visibility into producer or
+stream problems — a bug invalidating 30% of messages would go unnoticed. By keeping `rejected_df`
+and writing it to a dedicated table (`stream_transactions_rejected`, see below), we get a true
+**Dead Letter Queue**: rejected data stays available for investigation, without ever blocking the
+main stream's processing.
 
 ---
 
-## 7. Emplacement des fichiers — résumé
+## 6. `spark/streaming_pipeline/jobs/streaming_job.py` — the conductor
+
+This is the main script, the one launched by `spark-submit` in `docker-compose.yml`. It chains, in
+order:
+
+1. **Loading the static dimensions** (`customers_static`, `articles_static`) — once, at startup.
+2. **Reading the Kafka stream** (`spark.readStream.format("kafka")...load()`), with
+   `startingOffsets: "latest"` — when the job (re)starts, it does **not** reread the topic's whole
+   history (otherwise every restart would reinject thousands of already-processed transactions).
+3. **Validation** (`parse_kafka_messages` + `split_valid_invalid`, see section 5).
+4. **Continuous writing**, via two functions called on every micro-batch (`foreachBatch`):
+   - `write_batch_to_postgres` → writes the valid transactions
+   - to `stream_transactions_ingested` (`append` mode).
+   - `write_rejected_to_postgres` → writes invalid messages to
+     `stream_transactions_rejected` (`append` mode).
+5. **`spark.streams.awaitAnyTermination()`**: keeps the script alive indefinitely, as long as
+   neither streaming query stops — this is the line that makes the job "never stop" (section 1.2).
+
+**Why a `stream_transactions_ingested` table separate from the batch Data Warehouse
+(`fact_transaction`)?** To never put the Data Warehouse already validated by the batch pipeline at
+risk. A streaming job, by nature less controlled than a batch run on fixed data, writes to its own
+landing table. Merging the two is handled separately, by a dedicated job
+(`merge_stream_to_warehouse.py`) outside this pipeline — see section 9.
+
+**Why a different `checkpointLocation` for `valid` and `rejected`?** Each streaming query
+(`writeStream`) has its own progress to track independently — mixing the two streams' checkpoints
+in the same folder would create offset-tracking conflicts.
+
+---
+
+## 7. File locations — summary
 
 ```
 spark/
 ├── common/
 │   ├── config.py            ← section 4
-│   └── schemas.py           ← schémas transactions/customers/articles
+│   └── schemas.py           ← transactions/customers/articles schemas
 └── streaming_pipeline/
-    ├── README.md             ← ce fichier
+    ├── README.md             ← this file
     ├── jobs/
-    │   └── streaming_job.py  ← section 7
+    │   └── streaming_job.py  ← section 6
     └── utils/
         └── validation.py     ← section 5
 ```
 
 ---
 
-## 9. Et après ? La suite du cycle (hors de ce dossier)
+## 9. What happens next? The rest of the cycle (outside this folder)
 
-`stream_transactions_ingested` n'est pas un point d'arrivée final — c'est une table d'atterrissage, consommée périodiquement par des jobs **batch** distincts, orchestrés par n8n :
+`stream_transactions_ingested` isn't a final destination — it's a landing table, consumed
+periodically by separate **batch** jobs, orchestrated by n8n:
 
-### Exécution quotidienne du pipeline batch
+### Daily batch pipeline run
 
-Chaque nuit à **02h00**, deux traitements batch sont exécutés dans un ordre précis afin de synchroniser les données et mettre à jour les Data Marts.
+Every night at **02:00**, two batch processes run in a precise order to synchronize the data and
+update the Data Marts.
 
-- **`merge_stream_to_warehouse.py`** (`spark/batch_ml_pipeline/jobs/`) :  
-  Ce job récupère les transactions validées provenant du pipeline streaming et les fusionne dans la table centrale `fact_transaction` du Data Warehouse. La fusion est réalisée en mode **append** avec gestion d'un **watermark** afin d'éviter les doublons et de ne traiter que les nouvelles transactions depuis la dernière exécution.
+- **`merge_stream_to_warehouse.py`** (`spark/batch_ml_pipeline/jobs/`):
+  This job fetches the transactions validated by the streaming pipeline and merges them into the
+  Data Warehouse's central `fact_transaction` table. The merge is done in **append** mode with a
+  **watermark** mechanism to avoid duplicates and only process new transactions since the last
+  run.
 
-- **`pipeline_hm.py --source=warehouse`** (`spark/batch_ml_pipeline/jobs/`) :  
-  Après la mise à jour du Data Warehouse, ce job recalcule les différents **Data Marts** (RFM clients, popularité des produits, statistiques commerciales, etc.) à partir de la table `fact_transaction`. Les calculs prennent en compte l'ensemble des données disponibles, incluant les transactions historiques issues des fichiers CSV ainsi que les nouvelles transactions intégrées depuis le streaming.
+- **`pipeline_hm.py --source=warehouse`** (`spark/batch_ml_pipeline/jobs/`):
+  After the Data Warehouse update, this job recomputes the various **Data Marts** (customer RFM,
+  product popularity, business statistics, etc.) from the `fact_transaction` table. The
+  computations take into account all available data, including the historical transactions from
+  the CSV files as well as the new transactions merged in from streaming.
 
-L'ordre d'exécution est donc le suivant :
+The execution order is therefore:
 
-1. **02h00 :** exécution de `merge_stream_to_warehouse.py` pour intégrer les nouvelles transactions streaming dans `fact_transaction`.
-2. **Après le merge :** exécution de `pipeline_hm.py --source=warehouse` pour recalculer les agrégats et mettre à jour les Data Marts.
+1. **02:00:** run `merge_stream_to_warehouse.py` to merge new streaming transactions into
+   `fact_transaction`.
+2. **After the merge:** run `pipeline_hm.py --source=warehouse` to recompute the aggregates and
+   update the Data Marts.
 
-Le pipeline streaming fonctionne en continu pendant la journée (Kafka → Spark Structured Streaming → stockage des transactions validées), tandis que les traitements batch de consolidation et d'analyse sont exécutés une seule fois par nuit.
+The streaming pipeline runs continuously throughout the day (Kafka → Spark Structured Streaming →
+storage of validated transactions), while the consolidation/analysis batch jobs run once per
+night.
 
-Ces deux jobs sont déclenchés par n8n via `spark/job_trigger_api.py` (le même principe que `producer_api.py` pour Kafka, mais pour `spark-submit`). Détail complet du cycle, diagramme et table des fréquences : [README principal, section 7](../../README.md#7-orchestration-n8n--cycle-complet).
+These two jobs are triggered by n8n via `spark/job_trigger_api.py` (the same principle as
+`producer_api.py` for Kafka, but for `spark-submit`). Full detail of the cycle, diagram, and
+frequency table: [main README, section 6](../README.md#6-n8n-orchestration--full-cycle).

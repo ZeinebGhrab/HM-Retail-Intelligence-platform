@@ -1,114 +1,134 @@
-# Workflows n8n — H&M Retail Intelligence Platform
+# n8n workflows — H&M Retail Intelligence Platform
 
-Orchestration du pipeline de données H&M : génération de transactions synthétiques, ingestion Kafka/Spark, calcul RFM nocturne, génération de rapport via LLM (Ollama), **ré-entraînement hebdomadaire des modèles ML** et diffusion multi-canal (SSE, chatbot, notifications push).
+<p align="center">
+  <a href="./README.md"><strong>🇬🇧 English</strong></a> ·
+  <a href="./README.fr.md">🇫🇷 Français</a>
+</p>
 
-## Fichiers
+Orchestration of the H&M data pipeline: synthetic transaction generation, Kafka/Spark ingestion,
+nightly RFM computation, LLM report generation (Ollama), **weekly ML model retraining**, and
+multi-channel broadcasting (SSE, chatbot, push notifications).
 
-Ces trois boucles étaient à l'origine un seul workflow (`HM Streaming Pipeline.json`). Elles sont
-maintenant **séparées en 3 fichiers indépendants**, importables séparément dans n8n, car elles n'ont
-aucune dépendance d'exécution entre elles (déclencheurs, horaires et échecs indépendants) :
+> Note: node names shown below (e.g. `Déclencheur - Simulation quotidienne`) are kept exactly as
+> they appear inside the n8n JSON files, since they are literal node identifiers, not prose.
 
-| Fichier | Boucle | Déclenchement | Rôle |
+## Files
+
+These three loops were originally a single workflow (`HM Streaming Pipeline.json`). They are now
+**split into 3 independent files**, importable separately into n8n, since they have no execution
+dependency on each other (independent triggers, schedules, and failure modes):
+
+| File | Loop | Trigger | Role |
 |---|---|---|---|
-| [`hm-simulation-quotidienne-kafka.json`](./hm-simulation-quotidienne-kafka.json) | **Streaming quotidien** | Tous les jours à **06:00** | Génère des transactions synthétiques, les publie sur Kafka, déclenche le job Spark streaming |
-| [`hm-rfm-nocturne-notifications.json`](./hm-rfm-nocturne-notifications.json) | **RFM nocturne** | Tous les jours à **02:00** | Fusionne les données streaming dans l'entrepôt, recalcule les scores RFM, génère un rapport IA et le diffuse aux clients (dashboard, chatbot, notifications) |
-| [`hm-reentrainement-hebdomadaire.json`](./hm-reentrainement-hebdomadaire.json) | **Ré-entraînement ML hebdomadaire** | Tous les **lundis à 06:00** (même cadence que `mlops-ci.yml`) | Ré-entraîne les 3 modèles (`ml/training/train_*.py`), promeut automatiquement le nouveau champion MLflow s'il est meilleur, recharge le cache de `ml-serving` et notifie |
+| [`hm-simulation-quotidienne-kafka.json`](./hm-simulation-quotidienne-kafka.json) | **Daily streaming** | Every day at **06:00** | Generates synthetic transactions, publishes them to Kafka, triggers the Spark streaming job |
+| [`hm-rfm-nocturne-notifications.json`](./hm-rfm-nocturne-notifications.json) | **Nightly RFM** | Every day at **02:00** | Merges streaming data into the warehouse, recomputes RFM scores, generates an AI report and broadcasts it to customers (dashboard, chatbot, notifications) |
+| [`hm-reentrainement-hebdomadaire.json`](./hm-reentrainement-hebdomadaire.json) | **Weekly ML retraining** | Every **Monday at 06:00** (same cadence as `mlops-ci.yml`) | Retrains the 3 models (`ml/training/train_*.py`), automatically promotes the new MLflow champion if it's better, reloads `ml-serving`'s cache, and notifies |
 
-Chaque fichier est un export n8n valide et autonome (`nodes` + `connections` propres), à importer
-individuellement via *Import from File* dans n8n.
+Each file is a valid, self-contained n8n export (clean `nodes` + `connections`), to be imported
+individually via *Import from File* in n8n.
 
-## Architecture du workflow
+## Workflow architecture
 
 ```
-06:00 ─┬─ Déclencheur simulation quotidienne
+06:00 ─┬─ Daily simulation trigger
        │
-       ├─ Calculer la date simulée1 (Code)
+       ├─ Compute simulated date (Code)
        │
-       ├─ Générer les transactions du jour (HTTP → generator_api:8089)
+       ├─ Generate the day's transactions (HTTP → generator_api:8089)
        │
-       ├─ Déclencher le producer Kafka (HTTP → kafka-producer-api:8090)
+       ├─ Trigger the Kafka producer (HTTP → kafka-producer-api:8090)
        │
-       └─ spark_pipeline_streaming 
+       └─ spark_pipeline_streaming
 
 
-02:00 ─┬─ Déclencheur RFM nocturne
+02:00 ─┬─ Nightly RFM trigger
        │
-       ├─ Lancer merge_stream_to_warehouse.py (HTTP → spark-job-trigger:8091)
+       ├─ Run merge_stream_to_warehouse.py (HTTP → spark-job-trigger:8091)
        │
-       ├─ Lancer pipeline_hm.py --source=warehouse (HTTP → spark-job-trigger:8091)
+       ├─ Run pipeline_hm.py --source=warehouse (HTTP → spark-job-trigger:8091)
        │
-       ├─ Attendre la fin du recalcul RFM (Wait)
+       ├─ Wait for the RFM recomputation to finish (Wait)
        │
-       ├─  Appeler l'API modèle prédiction (HTTP → ml-model-api:8000)
+       ├─ Call the prediction model API (HTTP → ml-model-api:8000)
        │
-       ├─ Préparer Prompt Ollama (Code)
+       ├─ Prepare Ollama prompt (Code)
        │
-       ├─ Basic LLM Chain (Ollama Model : llama3.2:3b-instruct-q4_K_M)
+       ├─ Basic LLM Chain (Ollama Model: llama3.2:3b-instruct-q4_K_M)
        │
-       ├─ Formater Payload SSE (Code)
+       ├─ Format SSE payload (Code)
        │
-       └─┬─ Push SSE → Django (dashboard temps réel)
-         ├─ Envoyer au Chatbot (RAG Django)
-         └─ Envoyer FCM (notification push mobile)
+       └─┬─ Push SSE → Django (real-time dashboard)
+         ├─ Send to Chatbot (RAG Django)
+         └─ Send FCM (mobile push notification)
 
 
-Lundi 06:00 ─┬─ Déclencheur ré-entraînement hebdomadaire
-             │
-             ├─ Lancer le ré-entraînement des 3 modèles (HTTP → ml-training-trigger:8600/train/all)
-             │
-             ├─ Analyser les résultats d'entraînement (Code — compare aux seuils/champion actuel)
-             │
-             ├─ Recharger les modèles (HTTP → ml-serving:8500/admin/reload-models)
-             │
-             └─ Notifier FCM - ré-entraînement terminé (HTTP → shopanalytics-django-api:8000)
+Monday 06:00 ─┬─ Weekly retraining trigger
+              │
+              ├─ Trigger retraining of the 3 models (HTTP → ml-training-trigger:8600/train/all)
+              │
+              ├─ Analyze training results (Code — compares against thresholds/current champion)
+              │
+              ├─ Reload models (HTTP → ml-serving:8500/admin/reload-models)
+              │
+              └─ Notify FCM - retraining finished (HTTP → shopanalytics-django-api:8000)
 ```
 
-## Déclencheurs
+## Triggers
 
-| Nœud | Type | Cron | Description |
+| Node | Type | Cron | Description |
 |---|---|---|---|
-| `Déclencheur - Simulation quotidienne` | Schedule Trigger | `0 6 * * *` | Démarre la boucle de génération/streaming chaque jour à 6h |
-| `Déclencheur - RFM nocturne (02:00)` | Schedule Trigger | `0 2 * * *` | Démarre la boucle de fusion + calcul RFM + rapport IA chaque nuit à 2h |
-| `Déclencheur - Ré-entraînement hebdomadaire (lundi 06:00)` | Schedule Trigger | `0 6 * * 1` | Démarre la boucle de ré-entraînement ML chaque lundi à 6h (même cadence que le cron `scheduled-retrain` de `.github/workflows/mlops-ci.yml`, mais ici pour la stack Docker locale) |
+| `Déclencheur - Simulation quotidienne` | Schedule Trigger | `0 6 * * *` | Starts the generation/streaming loop every day at 6am |
+| `Déclencheur - RFM nocturne (02:00)` | Schedule Trigger | `0 2 * * *` | Starts the merge + RFM computation + AI report loop every night at 2am |
+| `Déclencheur - Ré-entraînement hebdomadaire (lundi 06:00)` | Schedule Trigger | `0 6 * * 1` | Starts the ML retraining loop every Monday at 6am (same cadence as the `scheduled-retrain` cron in `.github/workflows/mlops-ci.yml`, but here for the local Docker stack) |
 
-## Boucle de ré-entraînement ML (nouveau)
+## ML retraining loop (new)
 
-1. **Lancer le ré-entraînement des 3 modèles** — `POST http://ml-training-trigger:8600/train/all?register=true&promote=true`.
-   Appelle en interne `ml/training/train_classification.py`, `train_regression.py` et `train_clustering.py` (aucune logique dupliquée), enregistre chaque run dans MLflow, puis compare la métrique clé du nouveau run (`f1_macro`, `rmse`, `silhouette_score` selon la tâche) à celle de l'alias `champion` actuel. Le nouveau modèle n'est promu `champion` que s'il est meilleur ou égal — c'est le garde-fou anti-régression décrit comme manquant dans `ml/MLOPS_GUIDE.md` §10.
-2. **Analyser les résultats d'entraînement** (Code) — construit un résumé lisible (quel modèle a été promu, avec quelle métrique) et un indicateur `any_promoted`.
-3. **Recharger les modèles** — `POST http://ml-serving:8500/admin/reload-models`. Nécessaire car l'API d'inférence met les modèles en cache mémoire au premier appel ; sans ce vidage de cache, un nouveau champion ne serait pris en compte qu'après redémarrage du conteneur `ml-serving`.
-4. **Notifier FCM** — réutilise l'endpoint `shopanalytics-django-api:8000/api/send-fcm/` déjà utilisé par la boucle RFM nocturne, avec un payload `type: "model_retrain"`.
+1. **Trigger retraining of the 3 models** — `POST http://ml-training-trigger:8600/train/all?register=true&promote=true`.
+   Internally calls `ml/training/train_classification.py`, `train_regression.py`, and
+   `train_clustering.py` (no duplicated logic), logs each run to MLflow, then compares the new
+   run's key metric (`f1_macro`, `rmse`, `silhouette_score` depending on the task) against the
+   current `champion` alias. The new model is only promoted to `champion` if it's better than or
+   equal to the current one — this is the anti-regression safeguard described as missing in
+   `ml/MLOPS_GUIDE.md` §10.
+2. **Analyze training results** (Code) — builds a readable summary (which model was promoted, with
+   which metric) and an `any_promoted` flag.
+3. **Reload models** — `POST http://ml-serving:8500/admin/reload-models`. Required because the
+   inference API caches models in memory on first call; without this cache flush, a new champion
+   would only be picked up after the `ml-serving` container restarts.
+4. **Notify FCM** — reuses the `shopanalytics-django-api:8000/api/send-fcm/` endpoint already used
+   by the nightly RFM loop, with a `type: "model_retrain"` payload.
 
-En cas d'échec d'un des 3 entraînements, `ml-training-trigger` renvoie un statut HTTP 500 avec le détail par tâche : le nœud HTTP Request n8n correspondant échoue alors et le workflow s'arrête avant de recharger `ml-serving` ou d'envoyer une notification (comportement voulu — pas de rechargement partiel/erroné).
+If one of the 3 trainings fails, `ml-training-trigger` returns an HTTP 500 status with per-task
+detail: the corresponding n8n HTTP Request node then fails, and the workflow stops before reloading
+`ml-serving` or sending a notification (intended behavior — no partial/incorrect reload).
 
-## Services externes appelés
+## External services called
 
-| Service | Port | Rôle |
+| Service | Port | Role |
 |---|---|---|
-| `generator_api` | 8089 | Génère les transactions synthétiques du jour |
-| `kafka-producer-api` | 8090 | Publie les transactions sur Kafka |
-| `shop-streaming-api` | 8000 | Job Spark Structured Streaming |
-| `spark-job-trigger` | 8091 | Déclenche les jobs batch (merge warehouse, calcul RFM) |
-| `ml-serving` | 8500 | API d'inférence (`ml/serving/app.py`) ; expose `/predict/club-status`, `/predict/segment`, `/predict/spend`, **`/predict/batch`**, et `POST /admin/reload-models` |
-| `ml-training-trigger` | 8600 | Déclenche les ré-entraînements et l'auto-promotion du champion MLflow (`ml/training/training_api.py`) |
-| `shopanalytics-django-api` | 8000 | Backend Django : SSE, chatbot RAG, notifications FCM |
+| `generator_api` | 8089 | Generates the day's synthetic transactions |
+| `kafka-producer-api` | 8090 | Publishes transactions to Kafka |
+| `shop-streaming-api` | 8000 | Spark Structured Streaming job |
+| `spark-job-trigger` | 8091 | Triggers batch jobs (warehouse merge, RFM computation) |
+| `ml-serving` | 8500 | Inference API (`ml/serving/app.py`); exposes `/predict/club-status`, `/predict/segment`, `/predict/spend`, **`/predict/batch`**, and `POST /admin/reload-models` |
+| `ml-training-trigger` | 8600 | Triggers retraining and MLflow champion auto-promotion (`ml/training/training_api.py`) |
+| `shopanalytics-django-api` | 8000 | Django backend: SSE, RAG chatbot, FCM notifications |
 
-## Scoring en masse pour le rapport IA — `POST /predict/batch`
+## Batch scoring for the AI report — `POST /predict/batch`
 
-Le nœud `Appeler l'API modèle (prédiction batch)` (boucle RFM nocturne) appelle désormais
-`POST http://ml-serving:8500/predict/batch` (`ml/serving/app.py`), **implémenté et testé**
-(`ml/tests/test_serving.py::test_predict_batch_*`), qui n'existait pas jusqu'ici (l'ancienne
-version pointait vers un service `ml-model-api:8000` inexistant et restait désactivée).
+The `Appeler l'API modèle (prédiction batch)` node (nightly RFM loop) now calls
+`POST http://ml-serving:8500/predict/batch` (`ml/serving/app.py`), **implemented and tested**
+(`ml/tests/test_serving.py::test_predict_batch_*`), which didn't exist before (the previous
+version pointed to a nonexistent `ml-model-api:8000` service and stayed disabled).
 
-Corps de requête (`source_table` et `limit` optionnels) :
+Request body (`source_table` and `limit` optional):
 ```json
 {"source_table": "customers_features_train"}
 ```
 
-Réponse : un résumé agrégé (`BatchPredictionSummary`), pas des prédictions ligne par ligne — pensé
-pour être directement injecté dans le prompt Ollama qui suit (`Préparer Prompt Ollama`, mis à jour
-en conséquence pour consommer ces champs plutôt que les champs de prévision de fréquentation d'un
-autre projet) :
+Response: an aggregated summary (`BatchPredictionSummary`), not row-by-row predictions — designed
+to be fed directly into the following Ollama prompt (`Préparer Prompt Ollama`, updated accordingly
+to consume these fields instead of the foot-traffic forecast fields from another project):
 
 ```json
 {
@@ -126,28 +146,27 @@ autre projet) :
 }
 ```
 
-**Ce qui reste une limite connue (hors périmètre de ce correctif)** : le nœud suivant `Push SSE →
-Django` (et `Envoyer au Chatbot`, `Envoyer FCM`) pointe toujours vers un backend Django absent de ce
-dépôt (voir `README.md` §2, projet `ShopAnalytics`). `Formater Payload SSE` produit donc un payload
-correctement formé à partir des vraies données H&M, mais l'appel HTTP qui le consomme échouera tant
-qu'aucun backend Django n'est déployé à l'URL configurée.
+**Remaining known limitation (out of scope for this fix)**: the following node `Push SSE →
+Django` (as well as `Envoyer au Chatbot`, `Envoyer FCM`) still points to a Django backend absent
+from this repository (see `README.md` §2, the `ShopAnalytics` project). `Formater Payload SSE`
+therefore produces a correctly formed payload from real H&M data, but the HTTP call consuming it
+will fail until a Django backend is deployed at the configured URL.
 
-## Garde-fou de qualité pour la promotion automatique du champion
+## Quality gate for automatic champion promotion
 
-Contrairement à ce qu'indiquait une version précédente de cette page, la promotion automatique de
-l'alias `champion` **n'est pas** une simple comparaison au champion précédent : `ml/training/
-training_api.py` applique d'abord un **seuil de qualité absolu par tâche** (`QUALITY_GATES`), qui
-bloque toute promotion si le nouveau modèle est en dessous — y compris quand il n'y a pas encore de
-champion, ou quand le champion actuel est pire (deux cas qu'une comparaison purement relative ne
-détecterait pas) :
+Contrary to what an earlier version of this page stated, automatic promotion of the `champion`
+alias **is not** a simple comparison against the previous champion: `ml/training/training_api.py`
+first applies an **absolute, per-task quality threshold** (`QUALITY_GATES`), which blocks any
+promotion if the new model falls below it — including when there is no champion yet, or when the
+current champion is worse (two cases a purely relative comparison would miss):
 
-| Tâche | Métrique | Seuil minimal |
+| Task | Metric | Minimum threshold |
 |---|---|---|
 | `classification` | `f1_macro` | 0.20 |
 | `regression` | `r2_log_target` | 0.50 |
 | `clustering` | `silhouette_score` | 0.10 |
 
-Seulement si ce seuil est franchi, la métrique est comparée au champion actuel (lu via l'API MLflow)
-et la promotion n'a lieu que si la nouvelle version est meilleure ou égale. Ce comportement est
-couvert par `ml/tests/test_training_api.py` (garde-fou testé indépendamment de tout entraînement
-réel ou accès réseau MLflow/PostgreSQL, via des fonctions d'entraînement factices).
+Only once this threshold is cleared is the metric compared against the current champion (read via
+the MLflow API), and promotion only happens if the new version is better than or equal to it. This
+behavior is covered by `ml/tests/test_training_api.py` (the safeguard is tested independently of
+any real training run or network access to MLflow/PostgreSQL, using fake training functions).

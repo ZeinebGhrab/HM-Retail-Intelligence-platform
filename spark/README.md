@@ -1,29 +1,40 @@
 # HM Retail Intelligence Platform
 
-Plateforme de données pour le projet H&M : ingestion, nettoyage, feature engineering et stockage, avec deux modes de traitement complémentaires — **batch** (historique) et **streaming** (temps réel simulé) — réunis dans un seul Data Warehouse et exploités par une API de prédiction.
+<p align="center">
+  <a href="./README.md"><strong>🇬🇧 English</strong></a> ·
+  <a href="./README.fr.md">🇫🇷 Français</a>
+</p>
 
-Vue d'ensemble du cycle complet, orchestré par n8n :
+Data platform for the H&M project: ingestion, cleaning, feature engineering, and storage, with two
+complementary processing modes — **batch** (historical) and **streaming** (simulated real-time) —
+brought together in a single Data Warehouse and consumed by a prediction API.
+
+Overview of the full cycle, orchestrated by n8n:
 
 ```
-Kafka (temps réel) ──► Spark Streaming ──► stream_transactions_ingested
+Kafka (real-time) ──► Spark Streaming ──► stream_transactions_ingested
                                                      │
-                                    toutes les 15 min │ merge_stream_to_warehouse.py
+                                every 15 min │ merge_stream_to_warehouse.py
                                                      ▼
                                             fact_transaction (Data Warehouse)
                                                      │
-                                     chaque nuit 02h00 │ pipeline_hm.py --source=warehouse
+                                     every night 02:00 │ pipeline_hm.py --source=warehouse
                                                      ▼
-                                        Data Marts (RFM, popularité produit, ...)
+                                        Data Marts (RFM, product popularity, ...)
                                                      │
                                                      ▼
-                                              API modèle (prédiction)
+                                              Model API (prediction)
 ```
 
-Ce README donne la vue d'ensemble du projet. Pour le détail technique du pipeline streaming (Dockerfile, docker-compose, méthodes de chaque fichier), voir [`spark/streaming_pipeline/README.md`](./spark/streaming_pipeline/README.md). Pour le détail de l'orchestration n8n (fusion périodique, recalcul RFM nocturne, appel du modèle), voir la [section 7](#7-orchestration-n8n--cycle-complet).
+This README gives the project overview. For the technical detail of the streaming pipeline
+(Dockerfile, docker-compose, each file's methods), see
+[`spark/streaming_pipeline/README.md`](./streaming_pipeline/README.md). For the detail of the n8n
+orchestration (periodic merge, nightly RFM recomputation, model call), see [section
+6](#6-n8n-orchestration--full-cycle).
 
 ---
 
-## Arborescence du projet
+## Project tree
 
 ```
 HM-Retail-Intelligence-Platform/
@@ -31,8 +42,8 @@ HM-Retail-Intelligence-Platform/
 │   └── raw/
 │       ├── customers.csv
 │       ├── articles.csv
-│       ├── transactions_train.csv          ← historique (batch)
-│       └── daily/                          ← simulateur de flux réel
+│       ├── transactions_train.csv          ← historical data (batch)
+│       └── daily/                          ← real-time stream simulator
 │           ├── transactions_2026-07-08.csv
 │           ├── transactions_2026-07-09.csv
 │           └── transactions_2026-07-10.csv
@@ -48,7 +59,7 @@ HM-Retail-Intelligence-Platform/
 │   ├── batch_ml_pipeline/
 │   │   ├── jobs/
 │   │   │   ├── pipeline_hm.py
-│   │   │   └── merge_stream_to_warehouse.py   ← fusion streaming → Data Warehouse (nouveau)
+│   │   │   └── merge_stream_to_warehouse.py   ← streaming → Data Warehouse merge (new)
 │   │   └── utils/
 │   │       ├── cleaning.py
 │   │       └── features.py
@@ -58,9 +69,9 @@ HM-Retail-Intelligence-Platform/
 │   │   └── utils/
 │   │       ├── cleaning.py
 │   │       └── validation.py
-│   ├── job_trigger_api.py                     ← déclenche les jobs Spark pour n8n (nouveau)
+│   ├── job_trigger_api.py                     ← triggers Spark jobs for n8n (new)
 │   └── job_trigger.Dockerfile
-├── model_api/                                  ← API de prédiction (nouveau)
+├── model_api/                                  ← prediction API (new)
 │   └── app.py
 ├── Dockerfile
 ├── docker-compose.yml
@@ -69,113 +80,131 @@ HM-Retail-Intelligence-Platform/
 
 ---
 
-## 1. Le dossier `data/`
+## 1. The `data/` folder
 
-Contient toutes les données du projet, en deux catégories bien séparées :
+Holds all of the project's data, in two clearly separated categories:
 
-| Sous-dossier | Contenu | Utilisé par |
+| Subfolder | Content | Used by |
 |---|---|---|
-| `data/raw/` (fichiers racine) | Le dataset Kaggle H&M complet et figé (`customers.csv`, `articles.csv`, `transactions_train.csv`, 33,7M lignes) | `batch_ml_pipeline` |
-| `data/raw/daily/` | Des fichiers CSV **générés artificiellement**, un par jour (`transactions_2026-07-08.csv`, etc.), pour simuler l'arrivée réelle de nouvelles transactions | `kafka/producers` (rejoués vers Kafka) |
+| `data/raw/` (root files) | The full, fixed Kaggle H&M dataset (`customers.csv`, `articles.csv`, `transactions_train.csv`, 33.7M rows) | `batch_ml_pipeline` |
+| `data/raw/daily/` | **Artificially generated** CSV files, one per day (`transactions_2026-07-08.csv`, etc.), to simulate the real arrival of new transactions | `kafka/producers` (replayed to Kafka) |
 
-`daily/` n'est pas une copie du dataset historique : c'est un **simulateur**. Chaque fichier représente ce qu'un jour de production enverrait réellement, rejoué message par message vers Kafka par le producer — voir plus bas.
+`daily/` isn't a copy of the historical dataset: it's a **simulator**. Each file represents what a
+real production day would actually send, replayed message by message to Kafka by the producer —
+see below.
 
 ---
 
-## 2. Le dossier `kafka/`
+## 2. The `kafka/` folder
 
-| Fichier | Rôle |
+| File | Role |
 |---|---|
-| `producers/transactions_producer.py` | Lit un fichier `daily/transactions_<date>.csv` et publie chaque ligne comme message JSON sur le topic Kafka `transactions.raw`, avec un léger délai entre chaque message pour simuler un flux réel (pas un déversement instantané). |
-| `producers/producer_api.py` | Petit serveur HTTP (FastAPI) qui expose `POST /produce?date=...` — c'est le point d'entrée que n8n appelle pour déclencher le producer, car n8n ne peut pas exécuter un script Python directement. |
-
+| `producers/transactions_producer.py` | Reads a `daily/transactions_<date>.csv` file and publishes each row as a JSON message on the `transactions.raw` Kafka topic, with a slight delay between each message to simulate a real stream (not an instant dump). |
+| `producers/producer_api.py` | Small HTTP server (FastAPI) exposing `POST /produce?date=...` — the entry point n8n calls to trigger the producer, since n8n can't run a Python script directly. |
 
 ---
 
-## 3. Le dossier `spark/`
+## 3. The `spark/` folder
 
-Contient trois sous-dossiers (une responsabilité distincte chacun) et un service d'orchestration :
+Contains three subfolders (each with a distinct responsibility) and an orchestration service:
 
 ### 3.1 `spark/common/`
 
-Code **partagé** entre le pipeline batch et le pipeline streaming, pour éviter la duplication :
+Code **shared** between the batch pipeline and the streaming pipeline, to avoid duplication:
 
-| Fichier | Rôle |
+| File | Role |
 |---|---|
-| `config.py` | Crée la `SparkSession` (`get_spark_session()`), la configuration JDBC vers PostgreSQL (`get_jdbc_config()`), et la configuration Kafka (`get_kafka_config()`). |
-| `schemas.py` | Définit les schémas Spark (`StructType`) des 3 fichiers sources : `transactions_schema`, `customers_schema`, `articles_schema`. Identiques pour le batch et le streaming — un seul endroit à modifier si le format des données change. |
+| `config.py` | Creates the `SparkSession` (`get_spark_session()`), the JDBC configuration to PostgreSQL (`get_jdbc_config()`), and the Kafka configuration (`get_kafka_config()`). |
+| `schemas.py` | Defines the Spark schemas (`StructType`) of the 3 source files: `transactions_schema`, `customers_schema`, `articles_schema`. Identical for batch and streaming — a single place to edit if the data format changes. |
 
 ### 3.2 `spark/batch_ml_pipeline/`
 
-Le pipeline historique, avec **deux jobs** distincts :
+The historical pipeline, with **two distinct jobs**:
 
-| Fichier | Rôle | Déclenché |
+| File | Role | Triggered |
 |---|---|---|
-| `jobs/pipeline_hm.py` | Nettoie, joint, calcule les features RFM et écrit les Data Marts. Accepte un argument `--source` : `csv` (comportement d'origine, lit les fichiers bruts — chargement initial) ou `warehouse` (relit `fact_transaction` déjà en base, donc CSV **et** streaming fusionnés — voir 3.2.1). | À la demande (chargement initial) puis chaque nuit à 02h00 en mode `warehouse` |
-| `jobs/merge_stream_to_warehouse.py` | **Nouveau.** Fusionne les transactions déjà validées par le streaming (`stream_transactions_ingested`) dans `fact_transaction`, en `append` uniquement, sans jamais retraiter deux fois la même donnée grâce à un **watermark** (table `merge_watermark`, une ligne par pipeline de fusion, mise à jour à chaque exécution réussie). | Toutes les 15 minutes |
+| `jobs/pipeline_hm.py` | Cleans, joins, computes RFM features, and writes the Data Marts. Accepts a `--source` argument: `csv` (original behavior, reads the raw files — initial load) or `warehouse` (rereads `fact_transaction` already in the database, i.e. CSV **and** streaming merged — see 3.2.1). | On demand (initial load) then every night at 02:00 in `warehouse` mode |
+| `jobs/merge_stream_to_warehouse.py` | **New.** Merges transactions already validated by streaming (`stream_transactions_ingested`) into `fact_transaction`, in `append` mode only, never reprocessing the same data twice thanks to a **watermark** (`merge_watermark` table, one row per merge pipeline, updated on every successful run). | Every 15 minutes |
 
-#### 3.2.1 Pourquoi fusionner streaming et batch dans `fact_transaction` ?
+#### 3.2.1 Why merge streaming and batch into `fact_transaction`?
 
-Sans fusion, `stream_transactions_ingested` (alimentée en continu) et `fact_transaction` (chargée une fois depuis les CSV) restent deux tables isolées : les Data Marts, recalculés uniquement à partir des CSV, ne voient jamais les transactions temps réel. `fact_transaction` devient donc la source de vérité unique, alimentée par deux canaux — un chargement initial depuis les CSV, puis des ajouts périodiques depuis le streaming — et `pipeline_hm.py --source=warehouse` recalcule ensuite les Data Marts sur cet ensemble combiné plutôt que sur les seuls CSV bruts.
+Without a merge, `stream_transactions_ingested` (fed continuously) and `fact_transaction` (loaded
+once from the CSVs) stay two isolated tables: the Data Marts, recomputed only from the CSVs, never
+see the real-time transactions. `fact_transaction` therefore becomes the single source of truth,
+fed by two channels — an initial load from the CSVs, then periodic additions from streaming — and
+`pipeline_hm.py --source=warehouse` then recomputes the Data Marts on this combined set rather
+than on the raw CSVs alone.
 
 ### 3.3 `spark/streaming_pipeline/`
 
-Le pipeline temps réel : lit en continu le topic Kafka `transactions.raw`, valide et enrichit chaque message, écrit en ajout (`append`) dans PostgreSQL (`stream_transactions_ingested`). Se lance une fois et ne s'arrête jamais.
+The real-time pipeline: continuously reads the `transactions.raw` Kafka topic, validates and
+enriches each message, writes in append mode (`append`) to PostgreSQL
+(`stream_transactions_ingested`). Starts once and never stops.
 
-**Détail complet de ce pipeline (Dockerfile, docker-compose, méthodes de chaque fichier) : voir [`spark/streaming_pipeline/README.md`](./spark/streaming_pipeline/README.md).**
+**Full detail of this pipeline (Dockerfile, docker-compose, each file's methods): see
+[`spark/streaming_pipeline/README.md`](./streaming_pipeline/README.md).**
 
 ### 3.4 `spark/job_trigger_api.py`
 
-**Nouveau.** n8n ne peut pas exécuter `spark-submit` directement (ce n'est pas un script Python qu'il sait lancer nativement) — ce petit serveur FastAPI joue exactement le même rôle que `producer_api.py` côté Kafka, mais pour les jobs Spark batch. Il expose `POST /jobs/{job_name}` (`job_name` = `merge-stream` ou `compute-rfm`) et lance, via `docker exec`, le `spark-submit` correspondant sur le conteneur `spark-worker`.
+**New.** n8n can't run `spark-submit` directly (it's not a Python script it knows how to launch
+natively) — this small FastAPI server plays exactly the same role as `producer_api.py` on the
+Kafka side, but for batch Spark jobs. It exposes `POST /jobs/{job_name}` (`job_name` =
+`merge-stream` or `compute-rfm`) and launches, via `docker exec`, the corresponding `spark-submit`
+on the `spark-worker` container.
 
-Il tourne dans son propre conteneur (`spark-job-trigger`, voir docker-compose ci-dessous) et est le **seul** service à monter le socket Docker (`/var/run/docker.sock`) — jamais n8n lui-même, pour limiter la surface d'attaque.
+It runs in its own container (`spark-job-trigger`, see docker-compose below) and is the **only**
+service mounting the Docker socket (`/var/run/docker.sock`) — never n8n itself, to limit the
+attack surface.
 
 ---
 
-## 4. Le dossier `model_api/`
+## 4. The `model_api/` folder
 
-**Nouveau.** API de prédiction (FastAPI) qui charge le dernier modèle entraîné et expose un endpoint de prédiction, à partir des features calculées dans les Data Marts (`customers_features_train`, etc.). C'est le dernier maillon du cycle nocturne : une fois les Data Marts recalculés, n8n appelle cette API pour rafraîchir les prédictions consommées en aval (churn, recommandation, etc.).
+**New.** Prediction API (FastAPI) that loads the latest trained model and exposes a prediction
+endpoint, based on the features computed in the Data Marts (`customers_features_train`, etc.).
+It's the last link in the nightly cycle: once the Data Marts are recomputed, n8n calls this API to
+refresh the predictions consumed downstream (churn, recommendation, etc.).
 
 ---
 
-## 5. Fichiers à la racine
+## 5. Root files
 
-| Fichier | Rôle |
+| File | Role |
 |---|---|
-| `Dockerfile` | Image Spark commune (batch + streaming), avec le driver JDBC PostgreSQL. |
-| `docker-compose.yml` | Orchestration de tous les services : Kafka, Zookeeper, PostgreSQL, Spark (master/worker/streaming), **`spark-job-trigger`** (nouveau), **`model-api`** (nouveau), n8n, le producer API, Adminer. |
-| `.env` | Configuration partagée (identifiants PostgreSQL, ports, nom du topic Kafka) — lue par tous les services. |
+| `Dockerfile` | Shared Spark image (batch + streaming), with the PostgreSQL JDBC driver. |
+| `docker-compose.yml` | Orchestrates all services: Kafka, Zookeeper, PostgreSQL, Spark (master/worker/streaming), **`spark-job-trigger`** (new), **`model-api`** (new), n8n, the producer API, Adminer. |
+| `.env` | Shared configuration (PostgreSQL credentials, ports, Kafka topic name) — read by every service. |
 
+---
 
+## 6. n8n orchestration — full cycle
 
-## 6. Orchestration n8n — cycle complet
+Four n8n workflows cover the entire cycle, from the Kafka message to the prediction:
 
-Quatre workflows n8n couvrent l'ensemble du cycle, du message Kafka jusqu'à la prédiction :
-
-| # | Étape | Déclencheur n8n | Fréquence | Appelle |
+| # | Step | n8n trigger | Frequency | Calls |
 |---|---|---|---|---|
-| 1 | Simulation d'arrivée de transactions | Manuel ou schedule | Ponctuel (test/démo) | `POST /produce?date=...` sur `kafka-producer-api` |
-| 2 | Ingestion streaming | Aucun (le job tourne déjà en continu, voir [`spark/streaming_pipeline/README.md`](./spark/streaming_pipeline/README.md)) | — | — |
-| 3 | Fusion streaming → Data Warehouse | Schedule Trigger | Toutes les 15 min | `POST /jobs/merge-stream` sur `spark-job-trigger` |
-| 4 | Recalcul des Data Marts (RFM, popularité produit, ...) | Schedule Trigger | Chaque nuit à 02h00 | `POST /jobs/compute-rfm?source=warehouse` sur `spark-job-trigger` |
-| 5 | Rafraîchissement des prédictions | Enchaîné après l'étape 4 (même workflow) | Chaque nuit à 02h00, juste après l'étape 4 | `model-api` |
+| 1 | Simulate transaction arrivals | Manual or schedule | One-off (test/demo) | `POST /produce?date=...` on `kafka-producer-api` |
+| 2 | Streaming ingestion | None (the job already runs continuously, see [`spark/streaming_pipeline/README.md`](./streaming_pipeline/README.md)) | — | — |
+| 3 | Streaming → Data Warehouse merge | Schedule Trigger | Every 15 min | `POST /jobs/merge-stream` on `spark-job-trigger` |
+| 4 | Recompute the Data Marts (RFM, product popularity, ...) | Schedule Trigger | Every night at 02:00 | `POST /jobs/compute-rfm?source=warehouse` on `spark-job-trigger` |
+| 5 | Refresh predictions | Chained after step 4 (same workflow) | Every night at 02:00, right after step 4 | `model-api` |
 
 ```
                 n8n
                  │
-                 │ POST /produce?date=2026-07-08     (étape 1, ponctuel)
+                 │ POST /produce?date=2026-07-08     (step 1, one-off)
                  ▼
         kafka-producer-api (FastAPI) ──► transactions_producer.py ──► Kafka topic: transactions.raw
                                                                               │
                                                                               ▼
-                                                          Spark Structured Streaming (étape 2, continu)
+                                                          Spark Structured Streaming (step 2, continuous)
                                                           
                                                                               │
                                                                               ▼
                                                           stream_transactions_ingested (PostgreSQL)
 
 
-                n8n  ── toutes les 15 min ──►  POST /jobs/merge-stream  ──► spark-job-trigger
+                n8n  ── every 15 min ──►  POST /jobs/merge-stream  ──► spark-job-trigger
                                                                                     │
                                                                                     ▼
                                                           merge_stream_to_warehouse.py (spark-submit)
@@ -184,7 +213,7 @@ Quatre workflows n8n couvrent l'ensemble du cycle, du message Kafka jusqu'à la 
                                                               fact_transaction (Data Warehouse)
 
 
-                n8n  ── chaque nuit 02h00 ──►  POST /jobs/compute-rfm?source=warehouse  ──► spark-job-trigger
+                n8n  ── every night 02:00 ──►  POST /jobs/compute-rfm?source=warehouse  ──► spark-job-trigger
                                                                                                     │
                                                                                                     ▼
                                                                   pipeline_hm.py --source=warehouse (spark-submit)
@@ -193,32 +222,52 @@ Quatre workflows n8n couvrent l'ensemble du cycle, du message Kafka jusqu'à la 
                                                                        Data Marts (customers_features_train, ...)
                                                                                                     │
                                                                                                     ▼
-                                                                              model-api (rafraîchit les prédictions)
+                                                                              model-api (refreshes predictions)
 ```
 
-**Pourquoi `spark-job-trigger` et pas n8n directement ?** n8n n'a pas de nœud natif pour lancer `spark-submit` (ce n'est pas un binaire HTTP). Comme pour le producer Kafka (`producer_api.py`, section 2), on passe donc par un petit serveur FastAPI intermédiaire qui, lui, sait exécuter la commande — voir 3.4 pour son fonctionnement et son placement Docker.
+**Why `spark-job-trigger` and not n8n directly?** n8n has no native node to launch `spark-submit`
+(it's not an HTTP binary). As with the Kafka producer (`producer_api.py`, section 2), we go
+through a small intermediate FastAPI server that knows how to run the command — see 3.4 for how it
+works and where it lives in Docker.
 
-**Pourquoi deux fréquences aussi différentes (15 min vs nocturne) ?** `merge_stream_to_warehouse.py` est un simple `append` incrémental sur les nouvelles lignes uniquement (léger, peut tourner souvent). `pipeline_hm.py --source=warehouse` recalcule en revanche tous les agrégats (RFM, popularité produit) sur l'ensemble du Data Warehouse — coûteux, donc réservé à un run quotidien, la nuit, quand la charge est faible.
+**Why two such different frequencies (15 min vs nightly)?** `merge_stream_to_warehouse.py` is a
+simple incremental `append` on new rows only (lightweight, can run often). `pipeline_hm.py
+--source=warehouse`, on the other hand, recomputes all the aggregates (RFM, product popularity)
+over the entire Data Warehouse — expensive, so it's reserved for a daily run, at night, when load
+is low.
+
 ---
 
 ## 7. API
 
-- **`streaming_api.py`** (à côté de `spark/streaming_pipeline/`) : expose `POST /streaming`, appelé par n8n pour démarrer le job Spark Streaming en continu via `spark-submit` s'il ne tourne pas déjà (ou simplement renvoyer son statut s'il tourne), avec des endpoints optionnels `/stop`, `/status` et `/logs` pour le piloter et le surveiller manuellement.
-- **`job_trigger_api.py`** (`spark/job_trigger_api.py`) : expose `POST /jobs/{job_name}`, appelé par n8n chaque nuit à 02:00, d'abord pour `merge-stream` (fusion `stream_transactions_ingested` → `fact_transaction`) puis, juste après dans le même workflow, pour `compute-rfm --source=warehouse` (recalcul des Data Marts sur le warehouse fraîchement fusionné), en lançant le `spark-submit` correspondant via `docker exec` sur `shop-spark-worker`, avec un timeout de sécurité de 30 minutes. 
-## 8. Commandes utiles (tests manuels)
+- **`streaming_api.py`** (next to `spark/streaming_pipeline/`): exposes `POST /streaming`, called
+  by n8n to start the continuous Spark Streaming job via `spark-submit` if it isn't already
+  running (or simply return its status if it is), with optional `/stop`, `/status`, and `/logs`
+  endpoints to control and monitor it manually.
+- **`job_trigger_api.py`** (`spark/job_trigger_api.py`): exposes `POST /jobs/{job_name}`, called by
+  n8n every night at 02:00, first for `merge-stream` (merging `stream_transactions_ingested` →
+  `fact_transaction`) then, right after in the same workflow, for `compute-rfm
+  --source=warehouse` (recomputing the Data Marts on the freshly merged warehouse), launching the
+  corresponding `spark-submit` via `docker exec` on `shop-spark-worker`, with a 30-minute safety
+  timeout.
+
+## 8. Useful commands (manual tests)
 
 ```bash
-# Lancer le job streaming à la main (hors n8n), pour vérifier qu'il tourne correctement :
+# Manually launch the streaming job (outside n8n), to check it's running correctly:
 docker exec -it shop-spark-master bash
 /opt/spark/bin/spark-submit \
   --master spark://spark-master:7077 \
   --packages org.apache.spark:spark-sql-kafka-0-10_2.12:3.5.1 \
   /opt/spark/work-dir/spark/streaming_pipeline/jobs/streaming_job.py
 
-# Vérifier que le topic Kafka existe et reçoit des messages :
+# Check that the Kafka topic exists and is receiving messages:
 docker exec -it shop-kafka bash
 kafka-topics --bootstrap-server kafka:29092 --list
 ```
-Invoke-WebRequest `                                               
->> -Method POST `                  
->> "http://localhost:8090/produce?date=2026-07-09"                      
+
+```powershell
+Invoke-WebRequest `
+  -Method POST `
+  "http://localhost:8090/produce?date=2026-07-09"
+```

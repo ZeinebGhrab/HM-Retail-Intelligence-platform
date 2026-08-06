@@ -1,23 +1,31 @@
 # 📊 Grafana Dashboards - HM Retail Intelligence Platform
 
-Ce document présente les dashboards Grafana **réellement implémentés** pour le projet
-**HM Retail Intelligence Platform**. Chaque panel a été vérifié contre les fichiers JSON exportés
-de Grafana et contre le schéma en étoile réellement produit par le pipeline Spark
+<p align="center">
+  <a href="./README_GRAFANA.md"><strong>🇬🇧 English</strong></a> ·
+  <a href="./README_GRAFANA.fr.md">🇫🇷 Français</a>
+</p>
+
+This document presents the Grafana dashboards **actually implemented** for the
+**HM Retail Intelligence Platform** project. Every panel has been checked against the JSON files
+exported from Grafana and against the star schema actually produced by the Spark pipeline
 (`spark/batch_ml_pipeline/jobs/pipeline_hm.py`).
 
-**État actuel : 5 dashboards, 25 panels, tous fonctionnels.**
-Aucun dashboard "temps réel" ou "monitoring ML" n'existe à ce jour (voir §6 "Ce qui n'est pas
-implémenté").
+**Current state: 5 dashboards, 25 panels, all functional.**
+No "real-time" or "ML monitoring" dashboard exists yet (see §6 "What is not implemented").
+
+*Note: the underlying SQL column aliases (e.g. `chiffre_affaires`, `ventes`) come straight from the
+Spark-produced tables and are kept as-is below so the queries can be copy-pasted directly into
+Grafana.*
 
 ---
 
-# Dashboard 1 : Sales Overview
+# Dashboard 1: Sales Overview
 
-## 1. Evolution du chiffre d'affaires
+## 1. Revenue over time
 
 **Type** 📈 Time Series (Line Chart)
 
-**Description** Permet de suivre l'évolution du chiffre d'affaires dans le temps.
+**Description** Tracks how revenue evolves over time.
 
 ```sql
 SELECT
@@ -27,11 +35,11 @@ FROM daily_sales
 ORDER BY date_key;
 ```
 
-## 2. Nombre de transactions par jour
+## 2. Number of transactions per day
 
 **Type** 📊 Bar Chart
 
-**Description** Suivre le volume de transactions jour par jour.
+**Description** Tracks daily transaction volume.
 
 ```sql
 SELECT
@@ -43,11 +51,11 @@ ORDER BY date_key;
 
 ---
 
-## 3. Nombre de transactions par mois
+## 3. Number of transactions per month
 
 **Type** 📊 Bar Chart
 
-**Description** Identifier les mois les plus actifs.
+**Description** Identifies the most active months.
 
 ```sql
 SELECT
@@ -58,11 +66,11 @@ GROUP BY month
 ORDER BY month;
 ```
 
-## 4. Chiffre d'affaires mensuel
+## 4. Monthly revenue
 
 **Type** 📊 Bar Chart
 
-**Description** Comparer les revenus entre les mois.
+**Description** Compares revenue across months.
 
 ```sql
 SELECT
@@ -75,11 +83,11 @@ ORDER BY month;
 
 ---
 
-## 5. Ticket moyen
+## 5. Average basket
 
 **Type** 📌 Stat Panel
 
-**Description** Montant moyen d'une transaction.
+**Description** Average amount of a transaction.
 
 ```sql
 SELECT
@@ -89,11 +97,11 @@ FROM daily_sales;
 
 ---
 
-## 6. Nombre total de ventes
+## 6. Total number of sales
 
 **Type** 📌 Stat Panel
 
-**Description** Indicateur global du nombre de ventes.
+**Description** Global indicator of the total number of sales.
 
 ```sql
 SELECT
@@ -103,11 +111,11 @@ FROM daily_sales;
 
 ---
 
-## 7. Chiffre d'affaires moyen par jour
+## 7. Average daily revenue
 
 **Type** 📌 Stat Panel
 
-**Description** Indicateur global : CA moyen généré par jour sur toute la période couverte.
+**Description** Global indicator: average revenue generated per day over the whole covered period.
 
 ```sql
 SELECT
@@ -117,13 +125,13 @@ FROM daily_sales;
 
 ---
 
-# Dashboard 2 : Product Analytics
+# Dashboard 2: Product Analytics
 
-## 8. Top 10 produits les plus vendus
+## 8. Top 10 best-selling products
 
 **Type** 📊 Horizontal Bar Chart
 
-**Description** Identifier les produits les plus populaires.
+**Description** Identifies the most popular products.
 
 ```sql
 SELECT
@@ -139,11 +147,11 @@ LIMIT 10;
 
 ---
 
-## 9. Top 10 produits générant le plus de revenus
+## 9. Top 10 highest-revenue products
 
 **Type** 📊 Horizontal Bar Chart
 
-**Description** Identifier les produits les plus rentables.
+**Description** Identifies the most profitable products.
 
 ```sql
 SELECT
@@ -159,11 +167,11 @@ LIMIT 10;
 
 ---
 
-## 10. Chiffre d'affaires par département
+## 10. Revenue by department
 
 **Type** 🥧 Pie Chart
 
-**Description** Visualiser la contribution de chaque département au chiffre d'affaires total.
+**Description** Visualizes each department's contribution to total revenue.
 
 ```sql
 SELECT
@@ -178,11 +186,11 @@ ORDER BY revenue DESC;
 
 ---
 
-## 11. Nombre de ventes par catégorie (top 10)
+## 11. Number of sales by category (top 10)
 
 **Type** 📊 Horizontal Bar Chart
 
-**Description** Comparer les catégories de produits les plus vendues.
+**Description** Compares the best-selling product categories.
 
 ```sql
 SELECT
@@ -196,11 +204,11 @@ LIMIT 10;
 
 ---
 
-## 12. Répartition des ventes par couleur
+## 12. Sales breakdown by colour
 
 **Type** 🥧 Pie Chart
 
-**Description** Visualiser les préférences des clients selon les couleurs des produits.
+**Description** Visualizes customer preferences based on product colour.
 
 ```sql
 SELECT
@@ -215,13 +223,13 @@ ORDER BY ventes DESC;
 
 ---
 
-# Dashboard 3 : Customer Analytics
+# Dashboard 3: Customer Analytics
 
-## 13. Répartition des clients par âge
+## 13. Customer breakdown by age
 
 **Type** 📊 Bar Chart
 
-**Description** Comprendre la répartition des clients selon leur tranche d'âge.
+**Description** Understands how customers are distributed across age groups.
 
 ```sql
 SELECT
@@ -234,11 +242,11 @@ ORDER BY age_group;
 
 ---
 
-## 14. Clients Club vs Non Club
+## 14. Club vs non-Club customers
 
 **Type** 🥧 Pie Chart
 
-**Description** Mesurer le taux d'adhésion au programme Club.
+**Description** Measures the Club program membership rate.
 
 ```sql
 SELECT
@@ -250,11 +258,11 @@ GROUP BY club_member_status;
 
 ---
 
-## 15. Répartition par fréquence Fashion News
+## 15. Breakdown by Fashion News frequency
 
 **Type** 🥧 Pie Chart
 
-**Description** Analyser la fréquence de réception des newsletters.
+**Description** Analyzes how often newsletters are received.
 
 ```sql
 SELECT
@@ -266,11 +274,11 @@ GROUP BY fashion_news_frequency;
 
 ---
 
-## 16. Top 20 meilleurs clients
+## 16. Top 20 best customers
 
 **Type** 📋 Table
 
-**Description** Identifier les clients ayant généré le plus de chiffre d'affaires.
+**Description** Identifies the customers who generated the most revenue.
 
 ```sql
 SELECT
@@ -285,11 +293,11 @@ LIMIT 20;
 
 ---
 
-## 17. Dépense moyenne par tranche d'âge
+## 17. Average spend by age group
 
 **Type** 📊 Bar Chart
 
-**Description** Comparer les habitudes d'achat selon les tranches d'âge.
+**Description** Compares purchasing habits across age groups.
 
 ```sql
 SELECT
@@ -304,11 +312,11 @@ ORDER BY avg_spend DESC;
 
 ---
 
-## 18. Nombre de clients
+## 18. Number of customers
 
 **Type** 📌 Stat Panel
 
-**Description** Indicateur global du nombre de clients dans la base.
+**Description** Global indicator of the number of customers in the database.
 
 ```sql
 SELECT COUNT(*) FROM dim_customer;
@@ -316,13 +324,13 @@ SELECT COUNT(*) FROM dim_customer;
 
 ---
 
-# Dashboard 4 : Customer Segmentation
+# Dashboard 4: Customer Segmentation
 
-## 19. Répartition des segments
+## 19. Segment breakdown
 
 **Type** 🍩 Pie Chart
 
-**Description** Visualiser la répartition des clients par segment (quartiles de dépense totale).
+**Description** Visualizes how customers are distributed across segments (total-spend quartiles).
 
 ```sql
 SELECT
@@ -333,11 +341,11 @@ FROM customer_segments_summary;
 
 ---
 
-## 20. CA généré par segment
+## 20. Revenue generated by segment
 
 **Type** 📊 Bar Chart
 
-**Description** Identifier les segments les plus rentables.
+**Description** Identifies the most profitable segments.
 
 ```sql
 SELECT
@@ -349,11 +357,11 @@ ORDER BY ca_segment DESC;
 
 ---
 
-## 21. Dépense moyenne par segment
+## 21. Average spend by segment
 
 **Type** 📊 Bar Chart
 
-**Description** Comparer le pouvoir d'achat des différents segments.
+**Description** Compares the purchasing power of the different segments.
 
 ```sql
 SELECT
@@ -365,11 +373,11 @@ ORDER BY montant_moyen DESC;
 
 ---
 
-## 22. Nombre moyen d'achats par segment
+## 22. Average number of purchases by segment
 
 **Type** 📊 Bar Chart
 
-**Description** Comparer la fidélité des différents segments de clientèle.
+**Description** Compares customer loyalty across the different segments.
 
 ```sql
 SELECT
@@ -381,18 +389,18 @@ ORDER BY achats_moyen DESC;
 
 ---
 
-# Dashboard 5 : Produits & Ventes journalières
+# Dashboard 5: Products & Daily Sales
 
-Basé sur les tables agrégées `products_performance` et `daily_sales`, déjà écrites par le pipeline
-Spark (`compute_products_performance`, `compute_daily_sales` dans `spark/batch_ml_pipeline/utils/features.py`)
-mais non exploitées jusqu'ici.
+Based on the aggregated tables `products_performance` and `daily_sales`, already written by the
+Spark pipeline (`compute_products_performance`, `compute_daily_sales` in
+`spark/batch_ml_pipeline/utils/features.py`) but not used until now.
 
-## 23. Top 10 produits par volume de ventes
+## 23. Top 10 products by sales volume
 
 **Type** 📊 Horizontal Bar Chart
 
-**Description** Classement des produits les plus vendus, calculé depuis la table déjà agrégée
-`products_performance` (plus rapide qu'une agrégation à la volée sur `fact_transaction`).
+**Description** Ranking of the best-selling products, computed from the already-aggregated
+`products_performance` table (faster than aggregating on the fly over `fact_transaction`).
 
 ```sql
 SELECT
@@ -405,12 +413,12 @@ LIMIT 10;
 
 ---
 
-## 24. Répartition des ventes par rayon (index)
+## 24. Sales breakdown by index (department group)
 
 **Type** 🥧 Pie Chart
 
-**Description** Visualiser la contribution de chaque rayon (`index_name` : Ladieswear, Menswear,
-Baby/Children, etc.) au volume total de ventes — une dimension non couverte par les autres dashboards.
+**Description** Visualizes each index (`index_name`: Ladieswear, Menswear, Baby/Children, etc.)
+contribution to total sales volume — a dimension not covered by the other dashboards.
 
 ```sql
 SELECT
@@ -421,9 +429,9 @@ GROUP BY index_name
 ORDER BY ventes DESC;
 ```
 
-# 25. Ce qui n'est pas implémenté (à ne pas présenter comme fonctionnel)
+# 25. What is not implemented (should not be presented as functional)
 
-| Dashboard envisagé                       | Pourquoi ce n'est pas fait aujourd'hui                                                                                                                                                                                                  |
-| ---------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Monitoring ML (MLflow + drift Evidently) | MLflow expose ses métriques via API REST, pas en SQL direct ; Evidently génère un rapport HTML statique. Il faut une datasource JSON API dans Grafana ou un export périodique vers PostgreSQL avant de pouvoir construire ce dashboard. |
-| Temps réel                               | Le service Kafka démarre dans Docker mais `kafka/producers/` et `kafka/consumers/` sont vides — rien ne publie ni ne consomme de flux. Le pipeline actuel lit des CSV statiques, pas un flux continu.                                   |
+| Planned dashboard | Why it isn't done today |
+| --- | --- |
+| ML monitoring (MLflow + Evidently drift) | MLflow exposes its metrics via a REST API, not directly in SQL; Evidently generates a static HTML report. A JSON API datasource in Grafana or a periodic export to PostgreSQL would be needed before this dashboard can be built. |
+| Real time | The Kafka service starts in Docker, but `kafka/producers/` and `kafka/consumers/` are empty — nothing publishes or consumes a stream. The current pipeline reads static CSVs, not a continuous stream. |                        |

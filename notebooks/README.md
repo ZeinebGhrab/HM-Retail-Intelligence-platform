@@ -1,43 +1,47 @@
-# H&M Retail Intelligence — Série de notebooks
+# H&M Retail Intelligence — Notebook Series
 
-Ce projet analyse le dataset Kaggle **H&M Personalized Fashion Recommendations**
-(`customers.csv`, `articles.csv`, `transactions_train.csv` — 33,7M lignes) à travers un pipeline
-complet : nettoyage, EDA, enrichissement externe, feature engineering RFM, export RAG, et
-modélisation ML (classification, régression, réduction de dimension, clustering).
+<p align="center">
+  <a href="./README.md"><strong>🇬🇧 English</strong></a> ·
+  <a href="./README.fr.md">🇫🇷 Français</a>
+</p>
 
-> ⚠️ **Sorties d'exécution (`.pkl`, `.csv`, `.md`)** : les fichiers intermédiaires
-> (`intermediate/*.pkl`, `customers_features.csv`, `insights_summary.md`, etc. — voir §2.1 et §4)
-> sont **générés localement à l'exécution des notebooks**, dans le dossier `intermediate/` à côté
-> des données (`BASE_PATH`). Ils **ne sont pas versionnés dans ce dépôt** car ils dépendent des
-> données brutes Kaggle (`customers.csv`, `articles.csv`, `transactions_train.csv`, non incluses —
-> voir `data/raw/`) : il faut exécuter la série 01→07 sur ces données pour les obtenir. Les
-> notebooks `.ipynb` de ce dossier contiennent en revanche déjà les sorties affichées (graphiques,
-> tableaux) de leur dernière exécution.
+This project analyzes the Kaggle **H&M Personalized Fashion Recommendations** dataset
+(`customers.csv`, `articles.csv`, `transactions_train.csv` — 33.7M rows) through a full pipeline:
+cleaning, EDA, external enrichment, RFM feature engineering, RAG export, and ML modeling
+(classification, regression, dimensionality reduction, clustering).
+
+> ⚠️ **Execution outputs (`.pkl`, `.csv`, `.md`)**: the intermediate files
+> (`intermediate/*.pkl`, `customers_features.csv`, `insights_summary.md`, etc. — see §2.1 and §4)
+> are **generated locally when the notebooks run**, in the `intermediate/` folder next to the data
+> (`BASE_PATH`). They are **not versioned in this repo** since they depend on the raw Kaggle data
+> (`customers.csv`, `articles.csv`, `transactions_train.csv`, not included — see `data/raw/`): the
+> 01→07 series needs to be run on that data to obtain them. The `.ipynb` notebooks in this folder,
+> on the other hand, already contain the displayed outputs (charts, tables) from their last run.
 
 ---
 
-## 1. Structure de la série
+## 1. Series structure
 
-| # | Notebook | Contenu | Sections d'origine |
+| # | Notebook | Content | Original sections |
 |---|---|---|---|
-| 01 | `01_EDA_Nettoyage_Clients.ipynb` | Config, nettoyage de `customers.csv` (imputation justifiée statistiquement), EDA clients | 0–7 |
-| 02 | `02_EDA_Produits_Transactions.ipynb` | EDA `articles.csv`, passage par blocs sur `transactions_train.csv` (33,7M lignes) | 8–10 |
-| 03 | `03_RFM_Enrichissement_Externe.ipynb` | Analyse RFM, enrichissement météo (Open-Meteo) et jours fériés (Nager.Date) | 11–13 |
-| 04 | `04_FeatureEngineering_Soldes_RAG.ipynb` | Table de features clients, impact des soldes, export base de connaissances RAG | 14–16 |
-| 05 | `05_ML_ReductionDim_Clustering_Rapide.ipynb` | Préparation ML, PCA, t-SNE/UMAP, K-Means exploratoire | 17.1–17.4 |
-| 06 | `06_ML_Classification_Regression.ipynb` | Classification (`club_member_status`) et régression (`total_spend`), SMOTE, GridSearchCV, boosting | 17.5–17.6 |
-| 07 | `07_ML_Clustering_Approfondi_Synthese.ipynb` | Clustering approfondi (K-Means/GMM/hiérarchique, k=6), interprétation par arbre de décision, synthèse ML | 17.7–17.8 |
+| 01 | `01_EDA_Nettoyage_Clients.ipynb` | Config, cleaning of `customers.csv` (statistically justified imputation), customer EDA | 0–7 |
+| 02 | `02_EDA_Produits_Transactions.ipynb` | `articles.csv` EDA, chunked pass over `transactions_train.csv` (33.7M rows) | 8–10 |
+| 03 | `03_RFM_Enrichissement_Externe.ipynb` | RFM analysis, weather enrichment (Open-Meteo) and public holidays (Nager.Date) | 11–13 |
+| 04 | `04_FeatureEngineering_Soldes_RAG.ipynb` | Customer feature table, sales-period impact, RAG knowledge base export | 14–16 |
+| 05 | `05_ML_ReductionDim_Clustering_Rapide.ipynb` | ML preparation, PCA, t-SNE/UMAP, exploratory K-Means | 17.1–17.4 |
+| 06 | `06_ML_Classification_Regression.ipynb` | Classification (`club_member_status`) and regression (`total_spend`), SMOTE, GridSearchCV, boosting | 17.5–17.6 |
+| 07 | `07_ML_Clustering_Approfondi_Synthese.ipynb` | In-depth clustering (K-Means/GMM/hierarchical, k=6), decision-tree interpretation, ML summary | 17.7–17.8 |
 
 ---
 
-## 2. Exécuter la série
+## 2. Running the series
 
-### 2.1 Ordre d'exécution
+### 2.1 Execution order
 
-**Les notebooks doivent être exécutés dans l'ordre, une fois chacun, sur le même `BASE_PATH`.**
-Chaque notebook exporte à sa dernière cellule les objets nécessaires au suivant dans un dossier
-`intermediate/` ; chaque notebook (à partir du 02) recharge ces objets dans sa première cellule
-de code plutôt que de tout recalculer.
+**The notebooks must be run in order, once each, against the same `BASE_PATH`.**
+Each notebook exports, in its last cell, the objects needed by the next one into an
+`intermediate/` folder; each notebook (from 02 onward) reloads these objects in its first code
+cell instead of recomputing everything.
 
 ```
 01 ──▶ nb01_customers.pkl ──────────────────────────────┐
@@ -45,65 +49,65 @@ de code plutôt que de tout recalculer.
 02 ──▶ nb02_transactions_accumulators.pkl ───────┬───────┼──▶ 03
                                                   │       └──▶ 04
 03 ──▶ nb03_segment_summary.pkl                  │
-       nb03_calendar_df.pkl (optionnel)  ────────┴───────────▶ 04
+       nb03_calendar_df.pkl (optional)  ─────────┴───────────▶ 04
 04 ──▶ customers_features.csv ───────────────────────────────▶ 05
 05 ──▶ nb05_ml_prep.pkl (ml_sample, X_behavior_scaled, scaler) ─┬──▶ 06
                                                                   └──▶ 07
 ```
 
-Si un notebook est ouvert seul sans que les précédents aient été exécutés, sa première cellule
-de code lève une `FileNotFoundError` explicite indiquant quel notebook exécuter avant.
+If a notebook is opened on its own without the previous ones having run, its first code cell
+raises an explicit `FileNotFoundError` indicating which notebook to run beforehand.
 
-### 2.2 Pourquoi cette architecture (et pas des notebooks 100% indépendants)
+### 2.2 Why this architecture (and not fully independent notebooks)
 
-Le passage sur `transactions_train.csv` (33,7M lignes) est fait **une seule fois**, par blocs, dans
-le notebook 02 — le relire à chaque notebook serait très coûteux en temps et en mémoire. Les
-notebooks 03 et 04 réutilisent donc les agrégats déjà calculés (dépenses par client, dates de 1er/
-dernier achat, CA quotidien, etc.) via un export/import `pickle`, plutôt que de recalculer.
+The pass over `transactions_train.csv` (33.7M rows) is done **only once**, in chunks, in notebook
+02 — re-reading it in every notebook would be very costly in time and memory. Notebooks 03 and 04
+therefore reuse the aggregates already computed (spend per customer, first/last purchase dates,
+daily revenue, etc.) via a `pickle` export/import, instead of recomputing them.
 
-### 2.3 Sur Google Colab
+### 2.3 On Google Colab
 
-1. Placer `customers.csv`, `articles.csv`, `transactions_train.csv` dans un dossier Google Drive,
-   par ex. `MyDrive/HM_dataset/`.
-2. Adapter si besoin `BASE_PATH` dans la première cellule de config de chaque notebook.
-3. Exécuter les notebooks 01 → 07 dans l'ordre. Le dossier `MyDrive/HM_dataset/intermediate/`
-   se remplit automatiquement au fil de l'exécution.
+1. Place `customers.csv`, `articles.csv`, `transactions_train.csv` in a Google Drive folder, e.g.
+   `MyDrive/HM_dataset/`.
+2. Adjust `BASE_PATH` in each notebook's first config cell if needed.
+3. Run notebooks 01 → 07 in order. The `MyDrive/HM_dataset/intermediate/` folder fills in
+   automatically as they run.
 
-### 2.4 Bascule `FULL_SCALE` (notebook 05)
+### 2.4 `FULL_SCALE` switch (notebook 05)
 
-- `FULL_SCALE = False` : échantillon stratifié de 50 000 clients (recommandé en environnement
-  contraint en RAM/CPU).
-- `FULL_SCALE = True` : ~1,36M clients acheteurs (recommandé sur Colab avec ≥12–25 Go de RAM).
-  Certains algorithmes restent cependant plafonnés quel que soit ce réglage, car leur coût
-  algorithmique (pas seulement mémoire) explose au-delà de quelques dizaines de milliers de
-  points : t-SNE (échantillon de 5 000), clustering hiérarchique (2 000), SVM/KNN (50 000),
-  et le rééquilibrage SMOTE (classe majoritaire plafonnée à 100 000).
-
----
-
-## 3. Points méthodologiques à connaître
-
-- **Codes postaux hashés en SHA-256** : aucune inférence géographique possible. L'enrichissement
-  météo/jours fériés utilise Stockholm/Suède comme proxy géographique global, pas une donnée réelle
-  du dataset (qui est mondial, sans attribution géographique par client).
-- **Météo exclue des modèles ML** : le test de significativité formel donne un R² < 5 % entre
-  température et ventes — statistiquement significatif mais négligeable en pratique.
-- **Section 17.4 vs 17.7 (clustering)** : la section 17.4 (notebook 05) retient volontairement
-  k=4 pour comparer au clustering aux quartiles RFM (section 11), même si l'analyse coude/silhouette
-  y recommande statistiquement k=6. Ce k=6 est repris et validé rigoureusement en section 17.7
-  (notebook 07) avec K-Means, clustering hiérarchique, GMM et critères BIC/AIC. Les deux sections
-  ont été relues pour que le texte reflète honnêtement cet écart méthodologique assumé, plutôt que
-  de prétendre à une fausse convergence.
-- **État production** : les modèles ne sont pas prêts pour la production — entraînés sur un
-  échantillon, pas de split temporel, pas de versioning des modèles, plafond F1-macro ~0,40 sur la
-  classification `club_member_status` dû au déséquilibre structurel des classes (`LEFT CLUB` < 0,1 %).
+- `FULL_SCALE = False`: stratified sample of 50,000 customers (recommended in a
+  RAM/CPU-constrained environment).
+- `FULL_SCALE = True`: ~1.36M purchasing customers (recommended on Colab with ≥12–25 GB of RAM).
+  Some algorithms remain capped regardless of this setting, though, because their algorithmic
+  cost (not just memory) explodes beyond a few tens of thousands of points: t-SNE (5,000-point
+  sample), hierarchical clustering (2,000), SVM/KNN (50,000), and SMOTE rebalancing (majority
+  class capped at 100,000).
 
 ---
 
-## 4. Autres documents du projet
+## 3. Methodological points to know
 
-- `ARCHITECTURE.md` (racine du projet) — architecture technique complète (7 cas d'usage, pile MLOps : Git, DVC,
-  DagsHub, MLflow, Docker, GitHub Actions, Evidently AI, intégration n8n).
-- Section RAG (notebook 04) — export de la base de connaissances pour le chatbot (`insights_summary.md`
-  + tables CSV agrégées, dans `intermediate/` — généré à l'exécution, non versionné, voir l'encart
-  en haut de ce document).
+- **Postal codes hashed with SHA-256**: no geographic inference is possible. Weather/holiday
+  enrichment uses Stockholm/Sweden as a global geographic proxy, not real data from the dataset
+  (which is worldwide, with no per-customer geographic attribution).
+- **Weather excluded from the ML models**: the formal significance test gives R² < 5% between
+  temperature and sales — statistically significant but negligible in practice.
+- **Section 17.4 vs 17.7 (clustering)**: section 17.4 (notebook 05) deliberately keeps k=4 to
+  compare against the RFM-quartile clustering (section 11), even though the elbow/silhouette
+  analysis there statistically recommends k=6. This k=6 is picked back up and rigorously validated
+  in section 17.7 (notebook 07) with K-Means, hierarchical clustering, GMM, and BIC/AIC criteria.
+  Both sections were reviewed so the text honestly reflects this deliberate methodological gap,
+  rather than claiming a false convergence.
+- **Production readiness**: the models are not production-ready — trained on a sample, no
+  temporal split, no model versioning, F1-macro capped around ~0.40 on the `club_member_status`
+  classification due to structural class imbalance (`LEFT CLUB` < 0.1%).
+
+---
+
+## 4. Other project documents
+
+- `ARCHITECTURE.md` (project root) — full technical architecture (7 use cases, MLOps stack: Git,
+  DVC, DagsHub, MLflow, Docker, GitHub Actions, Evidently AI, n8n integration).
+- RAG section (notebook 04) — export of the knowledge base for the chatbot (`insights_summary.md`
+  + aggregated CSV tables, in `intermediate/` — generated at run time, not versioned, see the
+  note at the top of this document).
