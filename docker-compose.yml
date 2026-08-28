@@ -1,10 +1,9 @@
 version: "3.9"
 
 services:
-
-# ============================================================
-# ZOOKEEPER
-# ============================================================
+  # ============================================================
+  # ZOOKEEPER
+  # ============================================================
 
   zookeeper:
     image: confluentinc/cp-zookeeper:7.5.3
@@ -20,9 +19,9 @@ services:
     networks:
       - shop_data_net
 
-# ============================================================
-# KAFKA
-# ============================================================
+  # ============================================================
+  # KAFKA
+  # ============================================================
 
   kafka:
     image: confluentinc/cp-kafka:7.5.3
@@ -38,7 +37,6 @@ services:
       - "${KAFKA_PORT}:9092"
 
     environment:
-
       KAFKA_BROKER_ID: 1
 
       KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
@@ -68,13 +66,12 @@ services:
       - .env
     networks:
       - shop_data_net
-    
- # ============================================================
-# KAFKA TOPIC INITIALIZATION
-# ============================================================
+
+  # ============================================================
+  # KAFKA TOPIC INITIALIZATION
+  # ============================================================
 
   kafka-init:
-
     image: confluentinc/cp-kafka:7.5.3
 
     container_name: shop-kafka-init
@@ -88,36 +85,35 @@ services:
       - bash
       - -c
       - |
-          echo "Waiting for Kafka broker..."
+        echo "Waiting for Kafka broker..."
 
-          until kafka-topics \
-            --bootstrap-server kafka:29092 \
-            --list >/dev/null 2>&1
-          do
-            echo "Kafka not ready, waiting..."
-            sleep 5
-          done
+        until kafka-topics \
+          --bootstrap-server kafka:29092 \
+          --list >/dev/null 2>&1
+        do
+          echo "Kafka not ready, waiting..."
+          sleep 5
+        done
 
-          echo "Kafka is ready"
+        echo "Kafka is ready"
 
-          kafka-topics \
-            --bootstrap-server kafka:29092 \
-            --create \
-            --if-not-exists \
-            --topic transactions.raw \
-            --partitions 3 \
-            --replication-factor 1
+        kafka-topics \
+          --bootstrap-server kafka:29092 \
+          --create \
+          --if-not-exists \
+          --topic transactions.raw \
+          --partitions 3 \
+          --replication-factor 1
 
-          echo "Topic transactions.raw created"
+        echo "Topic transactions.raw created"
 
     networks:
       - shop_data_net
-# ============================================================
-# POSTGRESQL
-# ============================================================
+  # ============================================================
+  # POSTGRESQL
+  # ============================================================
 
   postgres:
-
     image: postgres:15-alpine
 
     container_name: shop-postgres
@@ -128,7 +124,6 @@ services:
       - "${POSTGRES_PORT}:5432"
 
     environment:
-
       POSTGRES_DB: ${POSTGRES_DB}
 
       POSTGRES_USER: ${POSTGRES_USER}
@@ -136,7 +131,6 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
 
     volumes:
-
       - postgres_data:/var/lib/postgresql/data
 
     healthcheck:
@@ -174,12 +168,11 @@ services:
       - ./grafana/provisioning:/etc/grafana/provisioning
     networks:
       - shop_data_net
-# ============================================================
-# SPARK MASTER
-# ============================================================
+  # ============================================================
+  # SPARK MASTER
+  # ============================================================
 
   spark-master:
-
     build:
       context: ./spark
     restart: unless-stopped
@@ -190,25 +183,22 @@ services:
     command: >
       /opt/spark/bin/spark-class org.apache.spark.deploy.master.Master
     environment:
-
       SPARK_MASTER_HOST: spark-master
 
       SPARK_MASTER_PORT: 7077
 
       SPARK_MASTER_WEBUI_PORT: 8080
-      
+
     env_file:
       - .env
 
     ports:
-
       - "${SPARK_MASTER_PORT}:7077"
 
       - "${SPARK_MASTER_WEBUI_PORT}:8080"
 
     volumes:
-
-      -  ./data:/opt/spark/work-dir/data
+      - ./data:/opt/spark/work-dir/data
       - ./spark:/opt/spark/work-dir/spark
 
       # - ./spark/jobs:/opt/spark/work-dir/jobs
@@ -222,12 +212,11 @@ services:
     networks:
       - shop_data_net
 
-# ============================================================
-# SPARK WORKER
-# ============================================================
+  # ============================================================
+  # SPARK WORKER
+  # ============================================================
 
   spark-worker:
-
     build:
       context: ./spark
 
@@ -251,17 +240,16 @@ services:
       SPARK_WORKER_CORES: 6
 
     volumes:
-
       - ./data:/opt/spark/work-dir/data
 
       - ./spark:/opt/spark/work-dir/spark
-      # - ./.env:/opt/spark/work-dir/.env 
+      # - ./.env:/opt/spark/work-dir/.env
 
     networks:
       - shop_data_net
-# ============================================================
-# spark-streaming-job
-# ============================================================
+  # ============================================================
+  # spark-streaming-job
+  # ============================================================
 
   # spark-streaming-job:
   #   build:
@@ -281,85 +269,82 @@ services:
   #   networks:
   #     - shop_data_net
 
-
-# ============================================================
-# SPARK WORKER STREAMING
-# ============================================================
-
-#   spark-worker-streaming:
-
-#     build:
-#       context: ./spark
-
-#     container_name: shop-spark-worker-streaming
-
-#     hostname: spark-worker-streaming
-
-#     depends_on:
-#       - spark-master
-
-#     command: >
-#       /opt/spark/bin/spark-class
-#       org.apache.spark.deploy.worker.Worker
-#       spark://spark-master:7077
-
-#     env_file:
-#       - .env
-
-#     environment:
-#       SPARK_MASTER_URL: spark://spark-master:7077
-#       SPARK_WORKER_MEMORY: 2G
-#       SPARK_WORKER_CORES: 2
-
-#     volumes:
-#       - ./data:/opt/spark/work-dir/data
-#       - ./spark:/opt/spark/work-dir/spark
-
-#     networks:
-#       - shop_data_net
-
-
-# # ============================================================
-# # SPARK WORKER BATCH
-# # ============================================================
-
-#   spark-worker-batch:
-
-#     build:
-#       context: ./spark
-
-#     container_name: shop-spark-worker-batch
-
-#     hostname: spark-worker-batch
-
-#     depends_on:
-#       - spark-master
-
-#     command: >
-#       /opt/spark/bin/spark-class
-#       org.apache.spark.deploy.worker.Worker
-#       spark://spark-master:7077
-
-#     env_file:
-#       - .env
-
-#     environment:
-#       SPARK_MASTER_URL: spark://spark-master:7077
-#       SPARK_WORKER_MEMORY: 6G
-#       SPARK_WORKER_CORES: 4
-
-#     volumes:
-#       - ./data:/opt/spark/work-dir/data
-#       - ./spark:/opt/spark/work-dir/spark
-
-#     networks:
-#       - shop_data_net
   # ============================================================
-# SPARK STREAMING JOB
-# ============================================================
+  # SPARK WORKER STREAMING
+  # ============================================================
+
+  #   spark-worker-streaming:
+
+  #     build:
+  #       context: ./spark
+
+  #     container_name: shop-spark-worker-streaming
+
+  #     hostname: spark-worker-streaming
+
+  #     depends_on:
+  #       - spark-master
+
+  #     command: >
+  #       /opt/spark/bin/spark-class
+  #       org.apache.spark.deploy.worker.Worker
+  #       spark://spark-master:7077
+
+  #     env_file:
+  #       - .env
+
+  #     environment:
+  #       SPARK_MASTER_URL: spark://spark-master:7077
+  #       SPARK_WORKER_MEMORY: 2G
+  #       SPARK_WORKER_CORES: 2
+
+  #     volumes:
+  #       - ./data:/opt/spark/work-dir/data
+  #       - ./spark:/opt/spark/work-dir/spark
+
+  #     networks:
+  #       - shop_data_net
+
+  # # ============================================================
+  # # SPARK WORKER BATCH
+  # # ============================================================
+
+  #   spark-worker-batch:
+
+  #     build:
+  #       context: ./spark
+
+  #     container_name: shop-spark-worker-batch
+
+  #     hostname: spark-worker-batch
+
+  #     depends_on:
+  #       - spark-master
+
+  #     command: >
+  #       /opt/spark/bin/spark-class
+  #       org.apache.spark.deploy.worker.Worker
+  #       spark://spark-master:7077
+
+  #     env_file:
+  #       - .env
+
+  #     environment:
+  #       SPARK_MASTER_URL: spark://spark-master:7077
+  #       SPARK_WORKER_MEMORY: 6G
+  #       SPARK_WORKER_CORES: 4
+
+  #     volumes:
+  #       - ./data:/opt/spark/work-dir/data
+  #       - ./spark:/opt/spark/work-dir/spark
+
+  #     networks:
+  #       - shop_data_net
+  # ============================================================
+  # SPARK STREAMING JOB
+  # ============================================================
 
   spark-streaming-job:
-
     build:
       context: ./spark
 
@@ -385,18 +370,14 @@ services:
       --total-executor-cores 2
       /opt/spark/work-dir/spark/streaming_pipeline/jobs/streaming_job.py
 
-
     volumes:
-
       - ./data:/opt/spark/work-dir/data
 
       - ./spark:/opt/spark/work-dir/spark
 
       - streaming_checkpoint:/opt/spark/work-dir/checkpoint
 
-
     networks:
-
       - shop_data_net
 
   # streaming-api:
@@ -414,9 +395,9 @@ services:
   #     - /var/run/docker.sock:/var/run/docker.sock
   #   networks:
   #     - shop_data_net
-# ============================================================
-# spark-job-trigger
-# ============================================================
+  # ============================================================
+  # spark-job-trigger
+  # ============================================================
   spark-job-trigger:
     build:
       context: ./spark
@@ -431,9 +412,9 @@ services:
     networks:
       - shop_data_net
       # ============================================================
-# generator_api
-# ============================================================
-  generator_api:
+  # generator_api
+  # ============================================================
+  generator-api:
     build:
       context: ./data/raw/daily
       dockerfile: Dockerfile
@@ -458,12 +439,11 @@ services:
     networks:
       - shop_data_net
 
-# ============================================================
-# N8N
-# ============================================================
+  # ============================================================
+  # N8N
+  # ============================================================
 
   n8n:
-
     image: n8nio/n8n:latest
 
     container_name: shop-n8n
@@ -471,15 +451,12 @@ services:
     restart: unless-stopped
 
     ports:
-
       - "${N8N_PORT}:5678"
 
     volumes:
-
       - n8n_data:/home/node/.n8n
 
     environment:
-
       N8N_HOST: 0.0.0.0
 
       N8N_PORT: 5678
@@ -491,12 +468,11 @@ services:
     networks:
       - shop_data_net
 
-# ============================================================
-# OLLAMA
-# ============================================================
+  # ============================================================
+  # OLLAMA
+  # ============================================================
 
   ollama:
-
     image: ollama/ollama
 
     container_name: shop-ollama
@@ -504,22 +480,83 @@ services:
     restart: unless-stopped
 
     ports:
-
       - "${OLLAMA_PORT}:11434"
 
     volumes:
-
       - ollama_data:/root/.ollama
+    environment:
+      - OLLAMA_NUM_PARALLEL=1
+      - OLLAMA_MAX_LOADED_MODELS=1
+    dns:
+      - 8.8.8.8
+    # Décommente si une machine avec GPU NVIDIA (+ nvidia-container-toolkit)
+    # est disponible. Bloqué par défaut : sans ce runtime installé, Docker
+    # refuse de démarrer le conteneur ("could not select device driver
+    # nvidia with capabilities: [[gpu]]") au lieu de replier sur le CPU.
+    # Ollama tourne très bien en CPU pur (voir backend/benchmark/config.py,
+    # profils CPU) sans ce bloc.
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: all
+    #           capabilities: [gpu]
+    healthcheck:
+      test: ["CMD-SHELL", "ollama list || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
 
     networks:
       - shop_data_net
 
-# ============================================================
-# QDRANT
-# ============================================================
+  # ============================================================
+  # BENCHMARK LLM (sélection du modèle Ollama — voir backend/benchmark/)
+  # ============================================================
+  # Ne démarre PAS avec un simple `docker compose up` (profiles: benchmark).
+  # Lancement explicite : docker compose --profile benchmark up --build benchmark
+  # Ré-exécution : run_once.sh ne relance rien si results/benchmark_report.json
+  # existe déjà — supprime ce fichier (ou tout backend/benchmark/results/) pour forcer.
+
+  benchmark:
+    build:
+      context: ./backend/benchmark
+
+    container_name: shop-benchmark
+
+    restart: "no"
+
+    depends_on:
+      ollama:
+        condition: service_healthy
+
+    environment:
+      OLLAMA_HOST: http://ollama:11434
+
+    volumes:
+      - ./backend/benchmark/results:/workspace/results
+
+    # Décommente si tu as un GPU NVIDIA (sinon CPU par défaut, ça marche aussi)
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: 1
+    #           capabilities: [gpu]
+
+    profiles: ["benchmark"]
+
+    networks:
+      - shop_data_net
+
+  # ============================================================
+  # QDRANT
+  # ============================================================
 
   qdrant:
-
     image: qdrant/qdrant
 
     container_name: shop-qdrant
@@ -527,22 +564,19 @@ services:
     restart: unless-stopped
 
     ports:
-
       - "${QDRANT_PORT}:6333"
 
     volumes:
-
       - qdrant_data:/qdrant/storage
 
     networks:
       - shop_data_net
 
-# ============================================================
-# MLFLOW (tracking d'expériences + Model Registry)
-# ============================================================
+  # ============================================================
+  # MLFLOW (tracking d'expériences + Model Registry)
+  # ============================================================
 
   mlflow:
-
     image: ghcr.io/mlflow/mlflow:v2.16.2
 
     container_name: shop-mlflow
@@ -557,22 +591,19 @@ services:
       --port 5000
 
     ports:
-
       - "${MLFLOW_PORT}:5000"
 
     volumes:
-
       - mlflow_data:/mlflow
 
     networks:
       - shop_data_net
 
-# ============================================================
-# ML SERVING (API d'inférence FastAPI — voir ml/serving/ et ml/MLOPS_GUIDE.md)
-# ============================================================
+  # ============================================================
+  # ML SERVING (API d'inférence FastAPI — voir ml/serving/ et ml/MLOPS_GUIDE.md)
+  # ============================================================
 
   ml-serving:
-
     build:
       context: ./ml
       dockerfile: serving/Dockerfile
@@ -586,11 +617,9 @@ services:
       - postgres
 
     ports:
-
       - "${ML_SERVING_PORT}:8500"
 
     environment:
-
       MLFLOW_TRACKING_URI: http://mlflow:5000
 
       POSTGRES_HOST: postgres
@@ -604,14 +633,12 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
 
     volumes:
-
       - ./ml/models:/opt/ml/models
 
     networks:
       - shop_data_net
 
 volumes:
-
   postgres_data:
 
   n8n_data:
@@ -626,9 +653,6 @@ volumes:
 
   grafana_data:
 
-
 networks:
-
   shop_data_net:
-
     driver: bridge
