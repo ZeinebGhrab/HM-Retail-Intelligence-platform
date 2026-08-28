@@ -1,0 +1,26 @@
+[
+  {
+    "id": "qwen3:4b-instruct-2507-q4_K_M",
+    "label": "Qwen 3 4B Instruct (q4_K_M)",
+    "params_b": 4,
+    "notes": "Génération plus récente que Qwen 2.5, ~2.5 Go — moitié moins lourd que qwen2.5:7b (4.7 Go) pour une taille de paramètres proche. Variante 'instruct-2507', pas 'thinking' (qui émettrait une trace de raisonnement avant le JSON et casserait valid_json_pct)."
+  },
+  {
+    "id": "qwen2.5:3b-instruct-q4_K_M",
+    "label": "Qwen 2.5 3B (q4_K_M)",
+    "params_b": 3,
+    "notes": "Bon compromis, tourne correctement en CPU"
+  },
+  {
+    "id": "llama3.2:3b-instruct-q4_K_M",
+    "label": "Llama 3.2 3B (q4_K_M)",
+    "params_b": 3,
+    "notes": "Bon compromis vitesse/qualité en CPU"
+  },
+  {
+    "id": "llama3.2:1b-instruct-q4_K_M",
+    "label": "Llama 3.2 1B (q4_K_M)",
+    "params_b": 1,
+    "notes": "Le plus léger, baseline de vitesse en CPU"
+  }
+]

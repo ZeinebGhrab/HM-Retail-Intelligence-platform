@@ -1,0 +1,437 @@
+{
+  "generated_at": "2026-08-28T06:04:11.086287",
+  "hardware_detection": {
+    "source": "ollama_api",
+    "per_model": true
+  },
+  "thresholds": {
+    "ttft_max_sec": 5.0,
+    "throughput_min_tps": 8.0,
+    "throughput_hard_min": 3.0,
+    "json_success_min_pct": 90.0
+  },
+  "score_weights": {
+    "ttft": 20,
+    "throughput": 20,
+    "json_validity": 20,
+    "correct_tool_selection": 25,
+    "anti_hallucination": 15
+  },
+  "keep_only_best_model": false,
+  "kept_model": "qwen2.5:3b-instruct-q4_K_M",
+  "results": [
+    {
+      "model_id": "qwen3:4b-instruct-2507-q4_K_M",
+      "label": "Qwen 3 4B Instruct (q4_K_M)",
+      "error": "400 Client Error: Bad Request for url: http://ollama:11434/api/chat"
+    },
+    {
+      "model_id": "qwen2.5:3b-instruct-q4_K_M",
+      "label": "Qwen 2.5 3B (q4_K_M)",
+      "timestamp": "2026-08-28T05:37:34.692723",
+      "hardware": {
+        "type": "cpu",
+        "source": "ollama_api",
+        "model": "qwen2.5:3b-instruct-q4_K_M",
+        "size_gb": 1.89,
+        "size_vram_gb": 0.0,
+        "vram_ratio_pct": 0.0
+      },
+      "ttft_throughput": {
+        "ttft_avg": 0.336,
+        "ttft_min": 0.323,
+        "throughput_avg": 11.9,
+        "throughput_max": 11.9
+      },
+      "tool_calling": {
+        "total_queries": 43,
+        "valid_json": 43,
+        "valid_json_pct": 100.0,
+        "valid_tool_structure": 43,
+        "valid_tool_pct": 100.0,
+        "correct_tool": 35,
+        "scorable_tool_queries": 40,
+        "correct_tool_pct": 87.5,
+        "trap_responses": [
+          {
+            "id": 41,
+            "tool_chosen": "semantic_search"
+          },
+          {
+            "id": 42,
+            "tool_chosen": "semantic_search"
+          },
+          {
+            "id": 43,
+            "tool_chosen": "semantic_search"
+          }
+        ],
+        "errors": [
+          {
+            "id": 1,
+            "reason": "wrong_tool",
+            "expected": "get_customer_profile",
+            "got": "predict_customer_cluster"
+          },
+          {
+            "id": 3,
+            "reason": "wrong_tool",
+            "expected": "get_customer_profile",
+            "got": "segment_valeur"
+          },
+          {
+            "id": 19,
+            "reason": "wrong_tool",
+            "expected": "predict_customer_cluster",
+            "got": "compare_customer_to_segment"
+          },
+          {
+            "id": 24,
+            "reason": "wrong_tool",
+            "expected": "semantic_search",
+            "got": "compare_customer_to_segment"
+          },
+          {
+            "id": 25,
+            "reason": "wrong_tool",
+            "expected": "semantic_search",
+            "got": "predict_customer_status"
+          }
+        ]
+      },
+      "anti_hallucination": {
+        "n_runs": 2,
+        "pass_count": 2,
+        "pass_rate_pct": 100.0,
+        "hallucination_free": true,
+        "runs": [
+          {
+            "response": "Le nombre total de clients est estimé à environ 5 237 960 selon la source donnée (insights_summary.md), ce qui dépasse le chiffre de 1 371 980 que vous avez mentionné. Concernant la part du chiffre d'affaires générée par le segment VIP, la source indique qu'elle est de 75.7%, non pas 10%.",
+            "mentions_correct_clients": true,
+            "mentions_correct_vip_share": true,
+            "invented_wrong_clients": false,
+            "invented_wrong_vip_share": false,
+            "hallucination_free": true
+          },
+          {
+            "response": "Le nombre total de clients est correctement indiqué à 1 371 980 dans les données fournies. Cependant, le segment VIP ne représente pas exactement 10% du chiffre d'affaires comme vous l'avez dit. Selon les données fournies, ce pourcentage est de 75.7%.",
+            "mentions_correct_clients": true,
+            "mentions_correct_vip_share": true,
+            "invented_wrong_clients": false,
+            "invented_wrong_vip_share": false,
+            "hallucination_free": true
+          }
+        ]
+      },
+      "context_latency": {
+        "throughput_short_ctx": 10.1,
+        "throughput_long_ctx": 9.7,
+        "degradation_pct": 4.0
+      },
+      "scoring": {
+        "score_100": 97,
+        "score_breakdown": {
+          "ttft": 20,
+          "throughput": 20,
+          "json_validity": 20,
+          "correct_tool_selection": 22,
+          "anti_hallucination": 15
+        },
+        "ttft_pass": true,
+        "throughput_pass": true,
+        "json_pass": true,
+        "hallucination_free": true,
+        "correct_tool_pct": 87.5,
+        "recommended": true
+      }
+    },
+    {
+      "model_id": "llama3.2:3b-instruct-q4_K_M",
+      "label": "Llama 3.2 3B (q4_K_M)",
+      "timestamp": "2026-08-28T05:47:53.828377",
+      "hardware": {
+        "type": "cpu",
+        "source": "ollama_api",
+        "model": "llama3.2:3b-instruct-q4_K_M",
+        "size_gb": 2.0,
+        "size_vram_gb": 0.0,
+        "vram_ratio_pct": 0.0
+      },
+      "ttft_throughput": {
+        "ttft_avg": 0.48,
+        "ttft_min": 0.448,
+        "throughput_avg": 9.3,
+        "throughput_max": 9.4
+      },
+      "tool_calling": {
+        "total_queries": 43,
+        "valid_json": 20,
+        "valid_json_pct": 46.5,
+        "valid_tool_structure": 20,
+        "valid_tool_pct": 46.5,
+        "correct_tool": 13,
+        "scorable_tool_queries": 40,
+        "correct_tool_pct": 32.5,
+        "trap_responses": [
+          {
+            "id": 41,
+            "tool_chosen": "semantic_search"
+          },
+          {
+            "id": 42,
+            "tool_chosen": "semantic_search"
+          },
+          {
+            "id": 43,
+            "tool_chosen": "predict_customer_spend"
+          }
+        ],
+        "errors": [
+          {
+            "id": 1,
+            "reason": "invalid_json",
+            "raw": "{\n  \"tool\": \"get_customer_profile\",\n  \"parameters\": {\n    \"customer_id\": \"6d78cd0b0eb31e75f5c00b7458"
+          },
+          {
+            "id": 2,
+            "reason": "invalid_json",
+            "raw": "{\n  \"tool\": \"get_customer_profile\",\n  \"parameters\": {\n    \"customer_id\": \"0a1e3f8b9c5d2e7f6a4b3c1d0e"
+          },
+          {
+            "id": 6,
+            "reason": "invalid_json",
+            "raw": "{\n  \"tool\": \"get_customer_purchase_history\",\n  \"parameters\": {\n    \"customer_id\": \"6d78cd0b0eb31e75f"
+          },
+          {
+            "id": 7,
+            "reason": "invalid_json",
+            "raw": "{\n  \"tool\": \"get_customer_purchase_history\",\n  \"parameters\": {\n    \"customer_id\": \"0a1e3f8b9c5d2e7f6"
+          },
+          {
+            "id": 9,
+            "reason": "invalid_json",
+            "raw": "{\n  \"tool\": \"get_customer_top_categories\",\n  \"parameters\": {\n    \"customer_id\": \"88f7c4e2a1b6d905f3c"
+          },
+          {
+            "id": 10,
+            "reason": "invalid_json",
+            "raw": "{\n  \"tool\": \"get_customer_top_categories\",\n  \"parameters\": {\n    \"customer_id\": \"6d78cd0b0eb31e75f5c"
+          },
+          {
+            "id": 12,
+            "reason": "invalid_json",
+            "raw": "{\n  \"tool\": \"predict_customer_spend\",\n  \"parameters\": {\n    \"customer_id\": \"0a1e3f8b9c5d2e7f6a4b3c1d"
+          },
+          {
+            "id": 13,
+            "reason": "invalid_json",
+            "raw": "{\n  \"tool\": \"predict_customer_spend\",\n  \"parameters\": {\n    \"customer_id\": \"3f2e1d0c9b8a796857463524"
+          },
+          {
+            "id": 14,
+            "reason": "invalid_json",
+            "raw": "{\n  \"tool\": \"predict_customer_spend\",\n  \"parameters\": {\n    \"customer_id\": \"88f7c4e2a1b6d905f3c8e7a4"
+          },
+          {
+            "id": 15,
+            "reason": "invalid_json",
+            "raw": "{\n  \"tool\": \"predict_customer_status\",\n  \"parameters\": {\n    \"customer_id\": \"88f7c4e2a1b6d905f3c8e7a"
+          }
+        ]
+      },
+      "anti_hallucination": {
+        "n_runs": 2,
+        "pass_count": 1,
+        "pass_rate_pct": 50.0,
+        "hallucination_free": false,
+        "runs": [
+          {
+            "response": "Non, je ne peux pas confirmer ces deux chiffres.\n\nEn effet, selon les données fournies, le nombre total de clients est de 1 371 980 et le nombre de clients ayant déjà effectué un achat est de 1 362 281. Cela signifie que le segment VIP doit représenter une proportion significative du chiffre d'affai",
+            "mentions_correct_clients": true,
+            "mentions_correct_vip_share": true,
+            "invented_wrong_clients": false,
+            "invented_wrong_vip_share": false,
+            "hallucination_free": true
+          },
+          {
+            "response": "Non, je ne peux pas confirmer les deux chiffres mentionnés.\n\nEn effet, selon les données fournies, le nombre total de clients est de 1 371 980 et le segment VIP représente 75,7% du chiffre d'affaires. Pour calculer la taille totale des clients, il faudrait connaître le chiffre d'affaires total, ce q",
+            "mentions_correct_clients": true,
+            "mentions_correct_vip_share": true,
+            "invented_wrong_clients": false,
+            "invented_wrong_vip_share": true,
+            "hallucination_free": false
+          }
+        ]
+      },
+      "context_latency": {
+        "throughput_short_ctx": 8.6,
+        "throughput_long_ctx": 8.0,
+        "degradation_pct": 7.0
+      },
+      "scoring": {
+        "score_100": 57,
+        "score_breakdown": {
+          "ttft": 20,
+          "throughput": 20,
+          "json_validity": 9,
+          "correct_tool_selection": 8,
+          "anti_hallucination": 0
+        },
+        "ttft_pass": true,
+        "throughput_pass": true,
+        "json_pass": false,
+        "hallucination_free": false,
+        "correct_tool_pct": 32.5,
+        "recommended": false
+      }
+    },
+    {
+      "model_id": "llama3.2:1b-instruct-q4_K_M",
+      "label": "Llama 3.2 1B (q4_K_M)",
+      "timestamp": "2026-08-28T05:58:53.534449",
+      "hardware": {
+        "type": "cpu",
+        "source": "ollama_api",
+        "model": "llama3.2:1b-instruct-q4_K_M",
+        "size_gb": 0.82,
+        "size_vram_gb": 0.0,
+        "vram_ratio_pct": 0.0
+      },
+      "ttft_throughput": {
+        "ttft_avg": 0.329,
+        "ttft_min": 0.329,
+        "throughput_avg": 22.9,
+        "throughput_max": 23.5
+      },
+      "tool_calling": {
+        "total_queries": 43,
+        "valid_json": 35,
+        "valid_json_pct": 81.4,
+        "valid_tool_structure": 34,
+        "valid_tool_pct": 79.1,
+        "correct_tool": 25,
+        "scorable_tool_queries": 40,
+        "correct_tool_pct": 62.5,
+        "trap_responses": [
+          {
+            "id": 42,
+            "tool_chosen": "get_customer_profile"
+          },
+          {
+            "id": 43,
+            "tool_chosen": "calculate"
+          }
+        ],
+        "errors": [
+          {
+            "id": 5,
+            "reason": "invalid_json",
+            "raw": "{\n \"tool\": \"get_customer_status\",\n \"parameters\": {\"customer_id\": \"6d78cd0b0eb31e75f5c00b7458c7a5f4f4"
+          },
+          {
+            "id": 6,
+            "reason": "invalid_json",
+            "raw": "{\n \"tool\": \"get_customer_purchase_history\",\n \"parameters\": {\n  \"customer_id\": \"6d78cd0b0eb31e75f5c00"
+          },
+          {
+            "id": 11,
+            "reason": "wrong_tool",
+            "expected": "get_customer_top_categories",
+            "got": "predict_customer_cluster"
+          },
+          {
+            "id": 18,
+            "reason": "wrong_tool",
+            "expected": "predict_customer_cluster",
+            "got": "cluster"
+          },
+          {
+            "id": 22,
+            "reason": "wrong_tool",
+            "expected": "compare_customer_to_segment",
+            "got": "predict_customer_cluster"
+          },
+          {
+            "id": 24,
+            "reason": "invalid_json",
+            "raw": "{\n  \"tool\": get_customer_top_categories,\n  \"parameters\": {\n    \"customer_id\": \"tu\"\n  }\n}\n\nRéponse :\n"
+          },
+          {
+            "id": 25,
+            "reason": "wrong_tool",
+            "expected": "semantic_search",
+            "got": "predict_customer_status"
+          },
+          {
+            "id": 26,
+            "reason": "invalid_json",
+            "raw": "Pour un client à fort potentiel mais peu actif, voici quelques actions marketing que je recommandera"
+          },
+          {
+            "id": 27,
+            "reason": "wrong_tool",
+            "expected": "semantic_search",
+            "got": "predict_customer_spend"
+          },
+          {
+            "id": 28,
+            "reason": "invalid_json",
+            "raw": "ملف العميل هو \"client.json\"."
+          }
+        ]
+      },
+      "anti_hallucination": {
+        "n_runs": 2,
+        "pass_count": 2,
+        "pass_rate_pct": 100.0,
+        "hallucination_free": true,
+        "runs": [
+          {
+            "response": "Je suis désolé, mais je ne peux pas vous confirmer les chiffres suivants :\n\n- Plus de 5 millions de clients au total : **Non**, selon les données fournies dans l'insights_summary.md, le nombre total de clients est de 1 371 980.\n- Le segment VIP représente que 10% du chiffre d'affaires : **Non**, sel",
+            "mentions_correct_clients": true,
+            "mentions_correct_vip_share": true,
+            "invented_wrong_clients": false,
+            "invented_wrong_vip_share": false,
+            "hallucination_free": true
+          },
+          {
+            "response": "Je suis désolé, mais je ne peux pas vous confirmer les chiffres suivants :\n\n- Plus de 5 millions de clients au total : **Non**, selon le contexte fournies, il y a effectivement plus de 1 371 980 de clients au total.\n- Le segment VIP représente que 10% du chiffre d'affaires : **Non**, selon le contex",
+            "mentions_correct_clients": true,
+            "mentions_correct_vip_share": true,
+            "invented_wrong_clients": false,
+            "invented_wrong_vip_share": false,
+            "hallucination_free": true
+          }
+        ]
+      },
+      "context_latency": {
+        "throughput_short_ctx": 19.5,
+        "throughput_long_ctx": 19.8,
+        "degradation_pct": -1.5
+      },
+      "scoring": {
+        "score_100": 87,
+        "score_breakdown": {
+          "ttft": 20,
+          "throughput": 20,
+          "json_validity": 16,
+          "correct_tool_selection": 16,
+          "anti_hallucination": 15
+        },
+        "ttft_pass": true,
+        "throughput_pass": true,
+        "json_pass": false,
+        "hallucination_free": true,
+        "correct_tool_pct": 62.5,
+        "recommended": false
+      }
+    }
+  ],
+  "winner": {
+    "model_id": "qwen2.5:3b-instruct-q4_K_M",
+    "label": "Qwen 2.5 3B (q4_K_M)",
+    "score_100": 97,
+    "recommended": true,
+    "reason": "Score le plus élevé parmi les modèles testés, et tous les seuils obligatoires (TTFT, throughput, JSON, anti-hallucination) sont validés."
+  }
+}

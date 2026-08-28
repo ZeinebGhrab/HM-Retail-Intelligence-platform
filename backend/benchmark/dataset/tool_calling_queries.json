@@ -1,0 +1,260 @@
+[
+  {
+    "id": 1,
+    "query": "Quel est le profil du client 6d78cd0b0eb31e75f5c00b7458c7a5f4f4d5e6a1a9e6a3ce2b1f3ab9d84f9a17 ?",
+    "expected_tool": "get_customer_profile",
+    "expected_keys": ["customer_id"]
+  },
+  {
+    "id": 2,
+    "query": "Peux-tu me donner les informations RFM du client 0a1e3f8b9c5d2e7f6a4b3c1d0e9f8a7b6c5d4e3f2a1b0c9d8e7f6a5b4c3d2e1f ?",
+    "expected_tool": "get_customer_profile",
+    "expected_keys": ["customer_id"]
+  },
+  {
+    "id": 3,
+    "query": "Quel est le segment de valeur (RFM) du client 3f2e1d0c9b8a7968574635241302f1e0d9c8b7a6958473625140312f0e9d8c7 ?",
+    "expected_tool": "get_customer_profile",
+    "expected_keys": ["customer_id"]
+  },
+  {
+    "id": 4,
+    "query": "Depuis combien de temps le client 88f7c4e2a1b6d905f3c8e7a4b2d9f6c1e8a5b3d0f7c4a1e9b6d3f0c7a4e1b8d5 est-il actif, et quand a-t-il acheté pour la dernière fois ?",
+    "expected_tool": "get_customer_profile",
+    "expected_keys": ["customer_id"]
+  },
+  {
+    "id": 5,
+    "query": "Quel est le statut club actuel du client 6d78cd0b0eb31e75f5c00b7458c7a5f4f4d5e6a1a9e6a3ce2b1f3ab9d84f9a17 ?",
+    "expected_tool": "get_customer_profile",
+    "expected_keys": ["customer_id"]
+  },
+  {
+    "id": 6,
+    "query": "Quels sont les derniers achats du client 6d78cd0b0eb31e75f5c00b7458c7a5f4f4d5e6a1a9e6a3ce2b1f3ab9d84f9a17 ?",
+    "expected_tool": "get_customer_purchase_history",
+    "expected_keys": ["customer_id"]
+  },
+  {
+    "id": 7,
+    "query": "Montre-moi les 5 derniers articles achetés par le client 0a1e3f8b9c5d2e7f6a4b3c1d0e9f8a7b6c5d4e3f2a1b0c9d8e7f6a5b4c3d2e1f.",
+    "expected_tool": "get_customer_purchase_history",
+    "expected_keys": ["customer_id", "limit"]
+  },
+  {
+    "id": 8,
+    "query": "Donne-moi l'historique des 10 dernières transactions du client 3f2e1d0c9b8a7968574635241302f1e0d9c8b7a6958473625140312f0e9d8c7.",
+    "expected_tool": "get_customer_purchase_history",
+    "expected_keys": ["customer_id", "limit"]
+  },
+  {
+    "id": 9,
+    "query": "Quelles sont les catégories de produits préférées du client 88f7c4e2a1b6d905f3c8e7a4b2d9f6c1e8a5b3d0f7c4a1e9b6d3f0c7a4e1b8d5 ?",
+    "expected_tool": "get_customer_top_categories",
+    "expected_keys": ["customer_id"]
+  },
+  {
+    "id": 10,
+    "query": "Dans quelles catégories le client 6d78cd0b0eb31e75f5c00b7458c7a5f4f4d5e6a1a9e6a3ce2b1f3ab9d84f9a17 achète-t-il le plus souvent ?",
+    "expected_tool": "get_customer_top_categories",
+    "expected_keys": ["customer_id"]
+  },
+  {
+    "id": 11,
+    "query": "Ce client achète-t-il plutôt des vêtements, des chaussures ou des accessoires ? Client : 0a1e3f8b9c5d2e7f6a4b3c1d0e9f8a7b6c5d4e3f2a1b0c9d8e7f6a5b4c3d2e1f.",
+    "expected_tool": "get_customer_top_categories",
+    "expected_keys": ["customer_id"]
+  },
+  {
+    "id": 12,
+    "query": "Quelle est la dépense totale prévue pour le client 0a1e3f8b9c5d2e7f6a4b3c1d0e9f8a7b6c5d4e3f2a1b0c9d8e7f6a5b4c3d2e1f ?",
+    "expected_tool": "predict_customer_spend",
+    "expected_keys": ["customer_id"]
+  },
+  {
+    "id": 13,
+    "query": "Combien ce client va-t-il probablement dépenser au total : 3f2e1d0c9b8a7968574635241302f1e0d9c8b7a6958473625140312f0e9d8c7 ?",
+    "expected_tool": "predict_customer_spend",
+    "expected_keys": ["customer_id"]
+  },
+  {
+    "id": 14,
+    "query": "Peux-tu estimer le montant que le client 88f7c4e2a1b6d905f3c8e7a4b2d9f6c1e8a5b3d0f7c4a1e9b6d3f0c7a4e1b8d5 dépensera dans le futur ?",
+    "expected_tool": "predict_customer_spend",
+    "expected_keys": ["customer_id"]
+  },
+  {
+    "id": 15,
+    "query": "Quel est le statut club probable du client 88f7c4e2a1b6d905f3c8e7a4b2d9f6c1e8a5b3d0f7c4a1e9b6d3f0c7a4e1b8d5 d'après le modèle de prédiction ?",
+    "expected_tool": "predict_customer_status",
+    "expected_keys": ["customer_id"]
+  },
+  {
+    "id": 16,
+    "query": "Est-ce que le client 6d78cd0b0eb31e75f5c00b7458c7a5f4f4d5e6a1a9e6a3ce2b1f3ab9d84f9a17 risque de quitter le club (LEFT CLUB) ?",
+    "expected_tool": "predict_customer_status",
+    "expected_keys": ["customer_id"]
+  },
+  {
+    "id": 17,
+    "query": "Le modèle prédit-il que ce client restera ACTIVE ? Client : 0a1e3f8b9c5d2e7f6a4b3c1d0e9f8a7b6c5d4e3f2a1b0c9d8e7f6a5b4c3d2e1f.",
+    "expected_tool": "predict_customer_status",
+    "expected_keys": ["customer_id"]
+  },
+  {
+    "id": 18,
+    "query": "À quel segment comportemental (cluster) appartient le client 0a1e3f8b9c5d2e7f6a4b3c1d0e9f8a7b6c5d4e3f2a1b0c9d8e7f6a5b4c3d2e1f ?",
+    "expected_tool": "predict_customer_cluster",
+    "expected_keys": ["customer_id"]
+  },
+  {
+    "id": 19,
+    "query": "Le client 3f2e1d0c9b8a7968574635241302f1e0d9c8b7a6958473625140312f0e9d8c7 fait-il partie des clients fidèles à forte valeur ou plutôt des clients occasionnels ?",
+    "expected_tool": "predict_customer_cluster",
+    "expected_keys": ["customer_id"]
+  },
+  {
+    "id": 20,
+    "query": "Dans quel profil comportemental le modèle de clustering classe-t-il ce client ? Client : 88f7c4e2a1b6d905f3c8e7a4b2d9f6c1e8a5b3d0f7c4a1e9b6d3f0c7a4e1b8d5.",
+    "expected_tool": "predict_customer_cluster",
+    "expected_keys": ["customer_id"]
+  },
+  {
+    "id": 21,
+    "query": "Comment le client 88f7c4e2a1b6d905f3c8e7a4b2d9f6c1e8a5b3d0f7c4a1e9b6d3f0c7a4e1b8d5 se situe-t-il par rapport à la moyenne de son segment de valeur ?",
+    "expected_tool": "compare_customer_to_segment",
+    "expected_keys": ["customer_id"]
+  },
+  {
+    "id": 22,
+    "query": "Le client 6d78cd0b0eb31e75f5c00b7458c7a5f4f4d5e6a1a9e6a3ce2b1f3ab9d84f9a17 dépense-t-il plus ou moins que les autres clients de son segment RFM ?",
+    "expected_tool": "compare_customer_to_segment",
+    "expected_keys": ["customer_id"]
+  },
+  {
+    "id": 23,
+    "query": "Le panier moyen du client 0a1e3f8b9c5d2e7f6a4b3c1d0e9f8a7b6c5d4e3f2a1b0c9d8e7f6a5b4c3d2e1f est-il au-dessus de la moyenne de son segment ?",
+    "expected_tool": "compare_customer_to_segment",
+    "expected_keys": ["customer_id"]
+  },
+  {
+    "id": 24,
+    "query": "Quels sont mes meilleurs clients ce mois-ci et qu'est-ce qui les distingue ?",
+    "expected_tool": "semantic_search",
+    "expected_keys": ["query"]
+  },
+  {
+    "id": 25,
+    "query": "Pourquoi un client fidèle arrêterait-il d'acheter du jour au lendemain ?",
+    "expected_tool": "semantic_search",
+    "expected_keys": ["query"]
+  },
+  {
+    "id": 26,
+    "query": "Quelles actions marketing recommanderais-tu pour un client à fort potentiel mais peu actif ?",
+    "expected_tool": "semantic_search",
+    "expected_keys": ["query"]
+  },
+  {
+    "id": 27,
+    "query": "Est-ce que la météo du jour peut expliquer une baisse des ventes en ligne ?",
+    "expected_tool": "semantic_search",
+    "expected_keys": ["query"]
+  },
+  {
+    "id": 28,
+    "query": "ما هو ملف العميل 3f2e1d0c9b8a7968574635241302f1e0d9c8b7a6958473625140312f0e9d8c7؟",
+    "expected_tool": "get_customer_profile",
+    "expected_keys": ["customer_id"]
+  },
+  {
+    "id": 29,
+    "query": "ما هي آخر مشتريات العميل 88f7c4e2a1b6d905f3c8e7a4b2d9f6c1e8a5b3d0f7c4a1e9b6d3f0c7a4e1b8d5؟",
+    "expected_tool": "get_customer_purchase_history",
+    "expected_keys": ["customer_id"]
+  },
+  {
+    "id": 30,
+    "query": "كم من المتوقع أن ينفق العميل 6d78cd0b0eb31e75f5c00b7458c7a5f4f4d5e6a1a9e6a3ce2b1f3ab9d84f9a17 في المستقبل؟",
+    "expected_tool": "predict_customer_spend",
+    "expected_keys": ["customer_id"]
+  },
+  {
+    "id": 31,
+    "query": "إلى أي شريحة سلوكية ينتمي العميل 0a1e3f8b9c5d2e7f6a4b3c1d0e9f8a7b6c5d4e3f2a1b0c9d8e7f6a5b4c3d2e1f؟",
+    "expected_tool": "predict_customer_cluster",
+    "expected_keys": ["customer_id"]
+  },
+  {
+    "id": 32,
+    "query": "هل يشتري هذا العميل أكثر من متوسط شريحته؟ العميل: 88f7c4e2a1b6d905f3c8e7a4b2d9f6c1e8a5b3d0f7c4a1e9b6d3f0c7a4e1b8d5",
+    "expected_tool": "compare_customer_to_segment",
+    "expected_keys": ["customer_id"]
+  },
+  {
+    "id": 33,
+    "query": "What is the profile of customer 3f2e1d0c9b8a7968574635241302f1e0d9c8b7a6958473625140312f0e9d8c7?",
+    "expected_tool": "get_customer_profile",
+    "expected_keys": ["customer_id"]
+  },
+  {
+    "id": 34,
+    "query": "Show me the purchase history of customer 88f7c4e2a1b6d905f3c8e7a4b2d9f6c1e8a5b3d0f7c4a1e9b6d3f0c7a4e1b8d5.",
+    "expected_tool": "get_customer_purchase_history",
+    "expected_keys": ["customer_id"]
+  },
+  {
+    "id": 35,
+    "query": "What are the top product categories for customer 6d78cd0b0eb31e75f5c00b7458c7a5f4f4d5e6a1a9e6a3ce2b1f3ab9d84f9a17?",
+    "expected_tool": "get_customer_top_categories",
+    "expected_keys": ["customer_id"]
+  },
+  {
+    "id": 36,
+    "query": "How much is customer 0a1e3f8b9c5d2e7f6a4b3c1d0e9f8a7b6c5d4e3f2a1b0c9d8e7f6a5b4c3d2e1f predicted to spend in the future?",
+    "expected_tool": "predict_customer_spend",
+    "expected_keys": ["customer_id"]
+  },
+  {
+    "id": 37,
+    "query": "Is customer 3f2e1d0c9b8a7968574635241302f1e0d9c8b7a6958473625140312f0e9d8c7 likely to leave the club?",
+    "expected_tool": "predict_customer_status",
+    "expected_keys": ["customer_id"]
+  },
+  {
+    "id": 38,
+    "query": "Which behavioral cluster does customer 88f7c4e2a1b6d905f3c8e7a4b2d9f6c1e8a5b3d0f7c4a1e9b6d3f0c7a4e1b8d5 belong to?",
+    "expected_tool": "predict_customer_cluster",
+    "expected_keys": ["customer_id"]
+  },
+  {
+    "id": 39,
+    "query": "How does customer 6d78cd0b0eb31e75f5c00b7458c7a5f4f4d5e6a1a9e6a3ce2b1f3ab9d84f9a17 compare to their value segment's average spend?",
+    "expected_tool": "compare_customer_to_segment",
+    "expected_keys": ["customer_id"]
+  },
+  {
+    "id": 40,
+    "query": "What's the main difference between VIP customers and low-value customers in general?",
+    "expected_tool": "semantic_search",
+    "expected_keys": ["query"]
+  },
+  {
+    "id": 41,
+    "query": "Raconte-moi une blague sur les vêtements.",
+    "expected_tool": null,
+    "expected_keys": []
+  },
+  {
+    "id": 42,
+    "query": "Quelle est la capitale de la Suède ?",
+    "expected_tool": null,
+    "expected_keys": []
+  },
+  {
+    "id": 43,
+    "query": "What's 12 times 7?",
+    "expected_tool": null,
+    "expected_keys": []
+  }
+]

@@ -1,0 +1,120 @@
+{
+  "model_id": "qwen2.5:3b-instruct-q4_K_M",
+  "label": "Qwen 2.5 3B (q4_K_M)",
+  "timestamp": "2026-08-28T05:37:34.692723",
+  "hardware": {
+    "type": "cpu",
+    "source": "ollama_api",
+    "model": "qwen2.5:3b-instruct-q4_K_M",
+    "size_gb": 1.89,
+    "size_vram_gb": 0.0,
+    "vram_ratio_pct": 0.0
+  },
+  "ttft_throughput": {
+    "ttft_avg": 0.336,
+    "ttft_min": 0.323,
+    "throughput_avg": 11.9,
+    "throughput_max": 11.9
+  },
+  "tool_calling": {
+    "total_queries": 43,
+    "valid_json": 43,
+    "valid_json_pct": 100.0,
+    "valid_tool_structure": 43,
+    "valid_tool_pct": 100.0,
+    "correct_tool": 35,
+    "scorable_tool_queries": 40,
+    "correct_tool_pct": 87.5,
+    "trap_responses": [
+      {
+        "id": 41,
+        "tool_chosen": "semantic_search"
+      },
+      {
+        "id": 42,
+        "tool_chosen": "semantic_search"
+      },
+      {
+        "id": 43,
+        "tool_chosen": "semantic_search"
+      }
+    ],
+    "errors": [
+      {
+        "id": 1,
+        "reason": "wrong_tool",
+        "expected": "get_customer_profile",
+        "got": "predict_customer_cluster"
+      },
+      {
+        "id": 3,
+        "reason": "wrong_tool",
+        "expected": "get_customer_profile",
+        "got": "segment_valeur"
+      },
+      {
+        "id": 19,
+        "reason": "wrong_tool",
+        "expected": "predict_customer_cluster",
+        "got": "compare_customer_to_segment"
+      },
+      {
+        "id": 24,
+        "reason": "wrong_tool",
+        "expected": "semantic_search",
+        "got": "compare_customer_to_segment"
+      },
+      {
+        "id": 25,
+        "reason": "wrong_tool",
+        "expected": "semantic_search",
+        "got": "predict_customer_status"
+      }
+    ]
+  },
+  "anti_hallucination": {
+    "n_runs": 2,
+    "pass_count": 2,
+    "pass_rate_pct": 100.0,
+    "hallucination_free": true,
+    "runs": [
+      {
+        "response": "Le nombre total de clients est estimé à environ 5 237 960 selon la source donnée (insights_summary.md), ce qui dépasse le chiffre de 1 371 980 que vous avez mentionné. Concernant la part du chiffre d'affaires générée par le segment VIP, la source indique qu'elle est de 75.7%, non pas 10%.",
+        "mentions_correct_clients": true,
+        "mentions_correct_vip_share": true,
+        "invented_wrong_clients": false,
+        "invented_wrong_vip_share": false,
+        "hallucination_free": true
+      },
+      {
+        "response": "Le nombre total de clients est correctement indiqué à 1 371 980 dans les données fournies. Cependant, le segment VIP ne représente pas exactement 10% du chiffre d'affaires comme vous l'avez dit. Selon les données fournies, ce pourcentage est de 75.7%.",
+        "mentions_correct_clients": true,
+        "mentions_correct_vip_share": true,
+        "invented_wrong_clients": false,
+        "invented_wrong_vip_share": false,
+        "hallucination_free": true
+      }
+    ]
+  },
+  "context_latency": {
+    "throughput_short_ctx": 10.1,
+    "throughput_long_ctx": 9.7,
+    "degradation_pct": 4.0
+  },
+  "scoring": {
+    "score_100": 97,
+    "score_breakdown": {
+      "ttft": 20,
+      "throughput": 20,
+      "json_validity": 20,
+      "correct_tool_selection": 22,
+      "anti_hallucination": 15
+    },
+    "ttft_pass": true,
+    "throughput_pass": true,
+    "json_pass": true,
+    "hallucination_free": true,
+    "correct_tool_pct": 87.5,
+    "recommended": true
+  }
+}

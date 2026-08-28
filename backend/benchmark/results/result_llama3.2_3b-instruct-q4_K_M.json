@@ -1,0 +1,140 @@
+{
+  "model_id": "llama3.2:3b-instruct-q4_K_M",
+  "label": "Llama 3.2 3B (q4_K_M)",
+  "timestamp": "2026-08-28T05:47:53.828377",
+  "hardware": {
+    "type": "cpu",
+    "source": "ollama_api",
+    "model": "llama3.2:3b-instruct-q4_K_M",
+    "size_gb": 2.0,
+    "size_vram_gb": 0.0,
+    "vram_ratio_pct": 0.0
+  },
+  "ttft_throughput": {
+    "ttft_avg": 0.48,
+    "ttft_min": 0.448,
+    "throughput_avg": 9.3,
+    "throughput_max": 9.4
+  },
+  "tool_calling": {
+    "total_queries": 43,
+    "valid_json": 20,
+    "valid_json_pct": 46.5,
+    "valid_tool_structure": 20,
+    "valid_tool_pct": 46.5,
+    "correct_tool": 13,
+    "scorable_tool_queries": 40,
+    "correct_tool_pct": 32.5,
+    "trap_responses": [
+      {
+        "id": 41,
+        "tool_chosen": "semantic_search"
+      },
+      {
+        "id": 42,
+        "tool_chosen": "semantic_search"
+      },
+      {
+        "id": 43,
+        "tool_chosen": "predict_customer_spend"
+      }
+    ],
+    "errors": [
+      {
+        "id": 1,
+        "reason": "invalid_json",
+        "raw": "{\n  \"tool\": \"get_customer_profile\",\n  \"parameters\": {\n    \"customer_id\": \"6d78cd0b0eb31e75f5c00b7458"
+      },
+      {
+        "id": 2,
+        "reason": "invalid_json",
+        "raw": "{\n  \"tool\": \"get_customer_profile\",\n  \"parameters\": {\n    \"customer_id\": \"0a1e3f8b9c5d2e7f6a4b3c1d0e"
+      },
+      {
+        "id": 6,
+        "reason": "invalid_json",
+        "raw": "{\n  \"tool\": \"get_customer_purchase_history\",\n  \"parameters\": {\n    \"customer_id\": \"6d78cd0b0eb31e75f"
+      },
+      {
+        "id": 7,
+        "reason": "invalid_json",
+        "raw": "{\n  \"tool\": \"get_customer_purchase_history\",\n  \"parameters\": {\n    \"customer_id\": \"0a1e3f8b9c5d2e7f6"
+      },
+      {
+        "id": 9,
+        "reason": "invalid_json",
+        "raw": "{\n  \"tool\": \"get_customer_top_categories\",\n  \"parameters\": {\n    \"customer_id\": \"88f7c4e2a1b6d905f3c"
+      },
+      {
+        "id": 10,
+        "reason": "invalid_json",
+        "raw": "{\n  \"tool\": \"get_customer_top_categories\",\n  \"parameters\": {\n    \"customer_id\": \"6d78cd0b0eb31e75f5c"
+      },
+      {
+        "id": 12,
+        "reason": "invalid_json",
+        "raw": "{\n  \"tool\": \"predict_customer_spend\",\n  \"parameters\": {\n    \"customer_id\": \"0a1e3f8b9c5d2e7f6a4b3c1d"
+      },
+      {
+        "id": 13,
+        "reason": "invalid_json",
+        "raw": "{\n  \"tool\": \"predict_customer_spend\",\n  \"parameters\": {\n    \"customer_id\": \"3f2e1d0c9b8a796857463524"
+      },
+      {
+        "id": 14,
+        "reason": "invalid_json",
+        "raw": "{\n  \"tool\": \"predict_customer_spend\",\n  \"parameters\": {\n    \"customer_id\": \"88f7c4e2a1b6d905f3c8e7a4"
+      },
+      {
+        "id": 15,
+        "reason": "invalid_json",
+        "raw": "{\n  \"tool\": \"predict_customer_status\",\n  \"parameters\": {\n    \"customer_id\": \"88f7c4e2a1b6d905f3c8e7a"
+      }
+    ]
+  },
+  "anti_hallucination": {
+    "n_runs": 2,
+    "pass_count": 1,
+    "pass_rate_pct": 50.0,
+    "hallucination_free": false,
+    "runs": [
+      {
+        "response": "Non, je ne peux pas confirmer ces deux chiffres.\n\nEn effet, selon les données fournies, le nombre total de clients est de 1 371 980 et le nombre de clients ayant déjà effectué un achat est de 1 362 281. Cela signifie que le segment VIP doit représenter une proportion significative du chiffre d'affai",
+        "mentions_correct_clients": true,
+        "mentions_correct_vip_share": true,
+        "invented_wrong_clients": false,
+        "invented_wrong_vip_share": false,
+        "hallucination_free": true
+      },
+      {
+        "response": "Non, je ne peux pas confirmer les deux chiffres mentionnés.\n\nEn effet, selon les données fournies, le nombre total de clients est de 1 371 980 et le segment VIP représente 75,7% du chiffre d'affaires. Pour calculer la taille totale des clients, il faudrait connaître le chiffre d'affaires total, ce q",
+        "mentions_correct_clients": true,
+        "mentions_correct_vip_share": true,
+        "invented_wrong_clients": false,
+        "invented_wrong_vip_share": true,
+        "hallucination_free": false
+      }
+    ]
+  },
+  "context_latency": {
+    "throughput_short_ctx": 8.6,
+    "throughput_long_ctx": 8.0,
+    "degradation_pct": 7.0
+  },
+  "scoring": {
+    "score_100": 57,
+    "score_breakdown": {
+      "ttft": 20,
+      "throughput": 20,
+      "json_validity": 9,
+      "correct_tool_selection": 8,
+      "anti_hallucination": 0
+    },
+    "ttft_pass": true,
+    "throughput_pass": true,
+    "json_pass": false,
+    "hallucination_free": false,
+    "correct_tool_pct": 32.5,
+    "recommended": false
+  }
+}
