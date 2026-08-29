@@ -1,0 +1,133 @@
+.chat-panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  width: 100%;
+  background: #ffffff;
+  border-left: 1px solid #e2e5e9;
+}
+
+.chat-panel-header {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px 16px;
+  border-bottom: 1px solid #e2e5e9;
+}
+
+.chat-panel-title {
+  font-weight: 600;
+  font-size: 15px;
+  color: #111827;
+}
+
+.chat-customer-input {
+  font-family: "SFMono-Regular", Consolas, monospace;
+  font-size: 12px;
+  padding: 6px 8px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  outline: none;
+}
+
+.chat-customer-input:focus {
+  border-color: #2563eb;
+}
+
+.chat-panel-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 14px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  background: #f9fafb;
+}
+
+.chat-msg-row {
+  display: flex;
+}
+
+.chat-msg-row.user {
+  justify-content: flex-end;
+}
+
+.chat-bubble {
+  max-width: 85%;
+  padding: 9px 12px;
+  border-radius: 12px;
+  font-size: 13.5px;
+  line-height: 1.45;
+}
+
+.chat-bubble p {
+  margin: 0;
+  white-space: pre-wrap;
+}
+
+.chat-bubble.bot {
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  color: #1f2937;
+}
+
+.chat-bubble.user {
+  background: #2563eb;
+  color: #ffffff;
+}
+
+.chat-bubble.loading p {
+  opacity: 0.5;
+}
+
+.chat-bubble-footer {
+  display: flex;
+  gap: 8px;
+  margin-top: 6px;
+  font-size: 10.5px;
+  opacity: 0.65;
+}
+
+.chat-bubble-model,
+.chat-bubble-tool {
+  font-family: monospace;
+  background: rgba(0, 0, 0, 0.06);
+  padding: 1px 5px;
+  border-radius: 4px;
+}
+
+.chat-panel-footer {
+  display: flex;
+  gap: 8px;
+  padding: 12px;
+  border-top: 1px solid #e2e5e9;
+}
+
+.chat-input {
+  flex: 1;
+  padding: 9px 12px;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  font-size: 13.5px;
+  outline: none;
+}
+
+.chat-input:focus {
+  border-color: #2563eb;
+}
+
+.chat-send-btn {
+  padding: 9px 16px;
+  background: #2563eb;
+  color: #ffffff;
+  border: none;
+  border-radius: 8px;
+  font-size: 13.5px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.chat-send-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}

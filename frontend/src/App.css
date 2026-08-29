@@ -1,0 +1,99 @@
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+.app-shell {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  width: 100vw;
+}
+
+.app-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 52px;
+  padding: 0 16px;
+  background: #111827;
+  color: #ffffff;
+  flex-shrink: 0;
+}
+
+.app-title {
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.chat-toggle-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border: none;
+  border-radius: 10px;
+  background: transparent;
+  color: #d1d5db;
+  cursor: pointer;
+}
+
+.chat-toggle-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #ffffff;
+}
+
+.chat-toggle-btn.active {
+  background: #2563eb;
+  color: #ffffff;
+}
+
+.app-body {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+}
+
+.app-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.app-chat-panel {
+  position: relative;
+  flex-shrink: 0;
+  overflow: hidden;
+}
+
+/* Poignée de redimensionnement pilotée en JS (App.tsx) plutôt que le
+   `resize: horizontal` natif du CSS : ce dernier place sa prise dans le
+   coin bas-droit de l'élément, exactement là où se trouve le pied du
+   panneau de chat (champ + bouton Envoyer) — invisible et impossible à
+   attraper en pratique (retour utilisateur du 2026-08-29). Une poignée
+   verticale explicite sur toute la hauteur, à gauche, est bien plus
+   facile à repérer et à saisir. */
+.app-chat-resize-handle {
+  position: absolute;
+  top: 0;
+  left: -4px;
+  width: 8px;
+  height: 100%;
+  cursor: ew-resize;
+  z-index: 5;
+}
+
+.app-chat-resize-handle:hover,
+.app-chat-resize-handle:active {
+  background: rgba(37, 99, 235, 0.35);
+}
