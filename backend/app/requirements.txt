@@ -1,0 +1,6 @@
+fastapi>=0.112
+uvicorn[standard]>=0.30
+requests>=2.32
+pandas>=2.2
+sqlalchemy>=2.0
+psycopg2-binary>=2.9
