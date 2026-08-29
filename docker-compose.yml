@@ -163,6 +163,15 @@ services:
     environment:
       - GF_SECURITY_ADMIN_USER=admin
       - GF_SECURITY_ADMIN_PASSWORD=hm_admin
+      # Embarquement en iframe dans frontend/ — désactivé par défaut chez
+      # Grafana (X-Frame-Options). Accès anonyme en lecture seule (Viewer)
+      # pour éviter un prompt de login à l'intérieur de l'iframe : ces
+      # dashboards sont déjà en aggregate-only (voir grafana/*.json, aucune
+      # variable de template pour un client précis), pas de donnée
+      # sensible par client exposée ici.
+      - GF_SECURITY_ALLOW_EMBEDDING=true
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Viewer
     volumes:
       - grafana_data:/var/lib/grafana
       - ./grafana/provisioning:/etc/grafana/provisioning
@@ -486,7 +495,15 @@ services:
       - ollama_data:/root/.ollama
     environment:
       - OLLAMA_NUM_PARALLEL=1
-      - OLLAMA_MAX_LOADED_MODELS=1
+      # =2 (pas 1) : backend/app/ alterne qwen2.5:3b (chat) et
+      # nomic-embed-text (embeddings, voir tools/semantic.py) DANS une même
+      # requête. À 1, chaque bascule forçait un déchargement/rechargement
+      # complet depuis le disque — mesuré en test réel le 2026-08-29 à un
+      # seul appel /api/chat prenant 47s (contre <1s en benchmark), le
+      # pipeline complet (2 appels chat + embeddings) dépassant largement la
+      # minute. Les deux modèles tiennent ensemble en RAM sans problème
+      # (~1.9 Go + 274 Mo, aucun GPU/VRAM en jeu ici).
+      - OLLAMA_MAX_LOADED_MODELS=2
     dns:
       - 8.8.8.8
     # Décommente si une machine avec GPU NVIDIA (+ nvidia-container-toolkit)
@@ -634,6 +651,44 @@ services:
 
     volumes:
       - ./ml/models:/opt/ml/models
+
+    networks:
+      - shop_data_net
+
+  # ============================================================
+  # CHATBOT APP (API RAG client-spécifique — voir backend/app/)
+  # ============================================================
+
+  chatbot-app:
+    build:
+      context: ./backend/app
+
+    container_name: shop-chatbot-app
+
+    restart: unless-stopped
+
+    depends_on:
+      - ollama
+      - postgres
+      - ml-serving
+
+    ports:
+      - "${CHATBOT_APP_PORT}:8600"
+
+    environment:
+      OLLAMA_HOST: http://ollama:11434
+
+      ML_SERVING_URL: http://ml-serving:8500
+
+      POSTGRES_HOST: postgres
+
+      POSTGRES_PORT: 5432
+
+      POSTGRES_DB: ${POSTGRES_DB}
+
+      POSTGRES_USER: ${POSTGRES_USER}
+
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
 
     networks:
       - shop_data_net
