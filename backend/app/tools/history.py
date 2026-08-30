@@ -9,6 +9,7 @@
 from __future__ import annotations
 
 import db
+from tool_signals import unavailable
 
 _UNAVAILABLE = (
     "L'historique d'achat détaillé n'est pas disponible pour le moment "
@@ -20,9 +21,9 @@ _UNAVAILABLE = (
 def get_customer_purchase_history(customer_id: str, limit: int = 10) -> str:
     rows = db.fetch_purchase_history(customer_id, limit=limit)
     if rows is None:
-        return _UNAVAILABLE
+        return unavailable(_UNAVAILABLE)
     if not rows:
-        return f"Aucune transaction trouvée pour le client {customer_id}."
+        return unavailable(f"Aucune transaction trouvée pour le client {customer_id}.")
 
     lines = [f"Dernières transactions du client {customer_id} :"]
     for r in rows:
@@ -37,9 +38,9 @@ def get_customer_purchase_history(customer_id: str, limit: int = 10) -> str:
 def get_customer_top_categories(customer_id: str, top_n: int = 5) -> str:
     rows = db.fetch_top_categories(customer_id, top_n=top_n)
     if rows is None:
-        return _UNAVAILABLE
+        return unavailable(_UNAVAILABLE)
     if not rows:
-        return f"Aucune catégorie de produit trouvée pour le client {customer_id}."
+        return unavailable(f"Aucune catégorie de produit trouvée pour le client {customer_id}.")
 
     lines = [f"Catégories les plus achetées par le client {customer_id} :"]
     for r in rows:

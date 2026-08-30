@@ -12,6 +12,7 @@ import json
 
 import ollama_client
 from config import MAX_HISTORY_TURNS, OLLAMA_MODEL
+from tool_signals import is_unavailable, strip_marker, unavailable
 from tools import SYSTEM_TOOL_CALLING, run_tool
 
 SYSTEM_ANSWER = """\
@@ -30,8 +31,16 @@ Interdiction stricte, sur ces valeurs UNIQUEMENT :
 - ne jamais les reformuler en pourcentage (0.649 n'est PAS "64,9%") ;
 - ne jamais tenter de les convertir dans une autre unité.
 Recopie ces indices tels quels (ex. "indice de dépense : 0.6490"), sans
-aucune reformulation. Ceci ne s'applique PAS aux champs explicitement en %
-dans le contexte (ex. part_CA_totale_%), qui restent des pourcentages.\
+aucune reformulation. Ceci ne s'applique PAS aux champs déjà exprimés en
+pourcentage dans le contexte, qui restent des pourcentages.
+Le CONTEXTE peut contenir des tableaux ou noms de colonnes bruts issus de
+fichiers de données (ex. "part_CA_totale_%", "CA_total", "nb_clients",
+"achats_moyen"). Ne recopie JAMAIS un nom de champ technique tel quel dans ta
+réponse (identifiable à un snake_case, un underscore, ou une abréviation) :
+reformule-le toujours en français naturel (ex. "part_CA_totale_%" devient
+"part du chiffre d'affaires total", "nb_clients" devient "nombre de
+clients"). Seule la VALEUR associée doit être reprise fidèlement, jamais le
+nom brut du champ.\
 """
 
 
@@ -77,7 +86,7 @@ def answer_question(
         parameters = {}
 
     if tool_name is None:
-        context = "Aucune donnée structurée disponible pour cette question."
+        context = unavailable("Aucune donnée structurée disponible pour cette question.")
     else:
         context = run_tool(
             tool_name,
@@ -85,6 +94,18 @@ def answer_question(
             customer_id=customer_id,
             question=question,
         )
+
+    # Court-circuit déterministe : si l'outil signale explicitement une
+    # indisponibilité (voir tool_signals.py), on ne passe même pas par le
+    # LLM de génération — pas de risque qu'il "comble" le vide avec une
+    # réponse inventée. Le message de l'outil, déjà clair, est renvoyé tel
+    # quel.
+    if is_unavailable(context):
+        return {
+            "answer": strip_marker(context),
+            "model": OLLAMA_MODEL,
+            "tool_used": tool_name,
+        }
 
     history_block = _format_history(history)
     prompt = (

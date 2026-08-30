@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import data_store
 import ollama_client
+from tool_signals import unavailable
 
 _MIN_SIMILARITY = 0.3
 
@@ -33,18 +34,18 @@ def semantic_search(query: str, n_results: int = 2) -> str:
     try:
         indexed = _get_chunk_embeddings()
     except Exception:
-        return (
+        return unavailable(
             "La recherche sémantique est indisponible pour le moment "
             "(service d'embeddings injoignable)."
         )
 
     if not indexed:
-        return "Aucune base de connaissance disponible."
+        return unavailable("Aucune base de connaissance disponible.")
 
     try:
         query_embedding = ollama_client.embed(query)
     except Exception:
-        return "La recherche sémantique est indisponible pour le moment."
+        return unavailable("La recherche sémantique est indisponible pour le moment.")
 
     scored = sorted(
         ((ollama_client.cosine_similarity(emb, query_embedding), chunk) for chunk, emb in indexed),
@@ -54,6 +55,6 @@ def semantic_search(query: str, n_results: int = 2) -> str:
     top = [(sim, chunk) for sim, chunk in scored[:n_results] if sim >= _MIN_SIMILARITY]
 
     if not top:
-        return "Aucune information pertinente trouvée dans la base de connaissance."
+        return unavailable("Aucune information pertinente trouvée dans la base de connaissance.")
 
     return "\n\n".join(f"[{chunk['title']}]\n{chunk['content']}" for _, chunk in top)

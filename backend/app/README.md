@@ -25,11 +25,18 @@ une dépendance) :
 
 | Outil | Source de données |
 |---|---|
-| `get_customer_profile` | Postgres (`customers_features_train`), repli CSV (`data/customers_features.csv`) |
+| `get_customer_profile` | Postgres (`customers_features_train`), repli CSV (`data/customers_features.csv`) — inclut la dépense **déjà réalisée** et le statut club **actuel** d'un client existant |
 | `compare_customer_to_segment` | idem + `data/customer_segments_summary.csv` |
-| `predict_customer_spend` / `predict_customer_status` / `predict_customer_cluster` | `ml/serving/app.py` (`/predict/*`) — lookup client puis appel HTTP, `ml-serving` reste inchangé |
+| `predict_customer_cluster` | `ml/serving/app.py` (`/predict/segment`) — client existant, lookup puis appel HTTP. Seule vraie prédiction possible sur un client existant : aucune colonne "cluster" n'existe nulle part dans les données, contrairement au statut/à la dépense déjà exposés par `get_customer_profile` |
+| `predict_spend_hypothetical` / `predict_status_hypothetical` | `ml/serving/app.py` (`/predict/spend`, `/predict/club-status`) — **profil hypothétique, sans customer_id** : valeurs extraites directement de la question par le LLM. Remplacent `predict_customer_spend`/`predict_customer_status` (retirés le 2026-08-31, voir `tools/predictions.py` — "prédire" total_spend/club_member_status d'un client **existant** n'a pas de sens : ce sont des faits déjà stockés, et `FULL_SCALE=True` a entraîné les modèles sur la quasi-totalité des clients, donc aucun client de ce dataset n'est "inédit" pour le modèle) |
 | `get_customer_purchase_history` / `get_customer_top_categories` | Postgres (`fact_transaction`) **uniquement** — pas de repli CSV, aucun fichier client × article × date n'a été exporté par les notebooks. Renvoie un message explicite si indisponible. |
-| `semantic_search` | `data/insights_summary.md`, découpé par section `##`, embeddings via `Ollama /api/embeddings`, cosine similarity en Python pur (pas de Qdrant — corpus trop petit pour le justifier) |
+| `semantic_search` | `data/insights_summary.md`, découpé par section `##`, embeddings via `Ollama /api/embed` (`nomic-embed-text`, pas le modèle de chat — voir découverte du 2026-08-29), cosine similarity en Python pur (pas de Qdrant — corpus trop petit pour le justifier) |
+
+⚠️ **Dérive avec le benchmark** : `backend/benchmark/dataset/tool_calling_queries.json` et son
+`SYSTEM_TOOL_CALLING` datent du palier d'outils précédent (avec `predict_customer_spend`/
+`predict_customer_status` par `customer_id`). Le benchmark n'a pas été rejoué contre le palier
+actuel — ses résultats restent valables pour l'ancien palier, conservés tels quels comme trace
+historique plutôt que mis à jour (décision du 2026-08-31).
 
 ## Données réelles vs repli
 

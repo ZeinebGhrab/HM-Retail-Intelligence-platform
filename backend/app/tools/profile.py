@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import db
 import data_store
+from tool_signals import unavailable
 
 # Le prix (donc total_spend, avg_basket_value) est pré-normalisé dans le
 # dataset Kaggle H&M — ce ne sont PAS des montants en devise réelle. Le
@@ -33,7 +34,7 @@ def get_customer_row(customer_id: str) -> tuple[dict | None, str]:
 def get_customer_profile(customer_id: str) -> str:
     row, source = get_customer_row(customer_id)
     if row is None:
-        return f"Aucun client trouvé avec l'identifiant {customer_id}."
+        return unavailable(f"Aucun client trouvé avec l'identifiant {customer_id}.")
 
     return (
         f"Profil du client {customer_id} (source : {source}) :\n"
@@ -54,7 +55,7 @@ def get_customer_profile(customer_id: str) -> str:
 def compare_customer_to_segment(customer_id: str) -> str:
     row, source = get_customer_row(customer_id)
     if row is None:
-        return f"Aucun client trouvé avec l'identifiant {customer_id}."
+        return unavailable(f"Aucun client trouvé avec l'identifiant {customer_id}.")
 
     segment = row.get("segment_valeur")
     try:
