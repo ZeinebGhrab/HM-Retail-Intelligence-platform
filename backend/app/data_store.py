@@ -55,6 +55,31 @@ def get_insights_markdown() -> str:
     return _insights_md
 
 
+# insights_summary.md (export notebook 04, §15) contient des en-têtes de
+# tableau bruts (noms de colonnes pandas, ex. "part_CA_totale_%") — voir bug
+# constaté en test réel le 2026-08-30 : le LLM les recopiait tels quels dans
+# ses réponses malgré des instructions explicites de reformulation (ne
+# suffisent pas de façon fiable avec un modèle 3B, même chose déjà observée
+# pour le routage d'outils). Remplacement déterministe en code plutôt que de
+# compter sur le LLM pour reformuler à chaque fois.
+_RAW_LABEL_MAP = {
+    "part_CA_totale_%": "part du chiffre d'affaires total (%)",
+    "montant_moyen": "montant moyen",
+    "achats_moyen": "nombre d'achats moyen",
+    "nb_clients": "nombre de clients",
+    "segment_valeur": "segment de valeur",
+    "CA_total": "chiffre d'affaires total",
+    "CA_moyen": "chiffre d'affaires moyen",
+    "age_group": "tranche d'âge",
+}
+
+
+def _humanize_labels(text: str) -> str:
+    for raw, human in _RAW_LABEL_MAP.items():
+        text = text.replace(raw, human)
+    return text
+
+
 def _chunk_markdown(md: str, default_title: str) -> list[dict[str, str]]:
     """Découpe un markdown par section '##', comme suggéré par le notebook 04
     (§15.1, 'Utilisation suggérée dans un pipeline RAG')."""
@@ -93,5 +118,6 @@ def get_insights_chunks() -> list[dict[str, str]]:
     for filename, default_title in _KB_FILES:
         path = DATA_DIR / filename
         if path.exists():
-            chunks.extend(_chunk_markdown(path.read_text(encoding="utf-8"), default_title))
+            content = _humanize_labels(path.read_text(encoding="utf-8"))
+            chunks.extend(_chunk_markdown(content, default_title))
     return chunks
