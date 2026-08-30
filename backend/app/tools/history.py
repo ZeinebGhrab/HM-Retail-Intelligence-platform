@@ -26,9 +26,10 @@ def get_customer_purchase_history(customer_id: str, limit: int = 10) -> str:
 
     lines = [f"Dernières transactions du client {customer_id} :"]
     for r in rows:
+        canal = "en ligne" if r["sales_channel_id"] == 2 else "en magasin"
         lines.append(
-            f"- article {r['article_id']} — prix {r['price']:.4f} — "
-            f"canal {r['sales_channel_id']} — {r['date_key']}"
+            f"- {r['date']} : {r['prod_name']} ({r['product_group_name']}) — "
+            f"prix (indice) {r['price']:.4f} — achat {canal}"
         )
     return "\n".join(lines)
 
