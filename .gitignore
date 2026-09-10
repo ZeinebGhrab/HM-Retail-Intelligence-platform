@@ -15,8 +15,10 @@ data/features/*
 !data/features/*.dvc
 intermediate/
 
+
 # Notebooks
 .ipynb_checkpoints/
+
 
 # Python
 __pycache__/
@@ -24,15 +26,18 @@ __pycache__/
 .venv/
 venv/
 
+
 # Modèles entraînés / artefacts MLflow
 ml/models/*
 !ml/models/.gitkeep
 mlruns/
 
+
 # Node (frontend)
 node_modules/
 frontend/dist/
 frontend/build/
+
 
 # Docker
 *.log
@@ -41,15 +46,18 @@ frontend/build/
 .DS_Store
 Thumbs.db
 
+
 # MLflow (tracking local / backend sqlite)
 mlflow.db
 mlflow_ci.db
 ml/mlflow_fallback.db
 mlflow_data/
 
+
 # Rapports de monitoring générés (Evidently)
 ml/monitoring/reports/*.html
 !ml/monitoring/reports/.gitkeep
+
 
 # DVC
 /.dvc/cache

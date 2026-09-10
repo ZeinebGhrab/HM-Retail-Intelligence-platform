@@ -68,8 +68,8 @@ def generate_report(config_path: str | None = None, current_path: str | None = N
     reference_sample = reference_sample[common_cols]
     current = current[common_cols]
 
-    from evidently.report import Report
     from evidently.metric_preset import DataDriftPreset
+    from evidently.report import Report
 
     report = Report(metrics=[DataDriftPreset()])
     report.run(reference_data=reference_sample, current_data=current)

@@ -1,21 +1,29 @@
-# Pipeline Big Data H&M — Spark, PostgreSQL & Data Warehouse
+# H&M Big Data Pipeline — Spark, PostgreSQL & Data Warehouse
 
-Pipeline de données batch qui transforme les fichiers CSV bruts du dataset **H&M (Kaggle)** en un **Data Warehouse PostgreSQL** structuré (schéma en étoile) et en **Data Marts** prêts à l'emploi pour le Machine Learning, un dashboard et un système RAG / LLM.
+<p align="center">
+  <a href="./README.md"><strong>🇬🇧 English</strong></a> ·
+  <a href="./README.fr.md">🇫🇷 Français</a>
+</p>
 
-Le tout tourne dans **Docker Compose**, avec **Apache Spark** comme moteur de traitement et **PostgreSQL** comme base de stockage finale, reliés via le protocole **JDBC**.
+Batch data pipeline that transforms the raw CSV files from the **H&M (Kaggle)** dataset into a
+structured **PostgreSQL Data Warehouse** (star schema) and ready-to-use **Data Marts** for Machine
+Learning, a dashboard, and a RAG / LLM system.
+
+Everything runs in **Docker Compose**, with **Apache Spark** as the processing engine and
+**PostgreSQL** as the final storage database, connected via the **JDBC** protocol.
 
 ---
 
-## 1. Vue d'ensemble du flux
+## 1. Flow overview
 
 ```
 CSV (Kaggle H&M)
       │
       ▼
-Apache Spark  ──────►  Driver JDBC PostgreSQL
+Apache Spark  ──────►  PostgreSQL JDBC Driver
       │                        │
       ▼                        ▼
-Nettoyage + Features   ──►  PostgreSQL (Data Warehouse)
+Cleaning + Features    ──►  PostgreSQL (Data Warehouse)
       │                        │
       ▼                        ▼
 Star Schema            Data Marts (ML · Dashboard · RAG)
@@ -23,19 +31,20 @@ Star Schema            Data Marts (ML · Dashboard · RAG)
 
 ---
 
-## 2. Pourquoi Spark écrit dans PostgreSQL via JDBC (et pas psycopg2) ?
+## 2. Why Spark writes to PostgreSQL via JDBC (and not psycopg2)
 
-- `psycopg2` (présent dans `requirements.txt`) n'est utilisé que par du code **Python pur**.
-- **Spark tourne sur la JVM (Java)** — il ne connaît pas `psycopg2`.
-- Quand le code appelle `df.write.jdbc(...)`, c'est **Spark (Java)** qui écrit dans PostgreSQL, pas Python. Il lui faut donc un **driver Java JDBC**.
+- `psycopg2` (present in `requirements.txt`) is only used by pure **Python** code.
+- **Spark runs on the JVM (Java)** — it doesn't know `psycopg2`.
+- When the code calls `df.write.jdbc(...)`, it's **Spark (Java)** that writes to PostgreSQL, not
+  Python. It therefore needs a **Java JDBC driver**.
 
 ```
-Script PySpark → Spark DataFrame API → Spark Engine (Java) → Driver JDBC PostgreSQL → PostgreSQL
+PySpark script → Spark DataFrame API → Spark Engine (Java) → PostgreSQL JDBC Driver → PostgreSQL
 ```
 
 ---
 
-## 3. Configuration partagée : le fichier `.env`
+## 3. Shared configuration: the `.env` file
 
 ```
 POSTGRES_PORT=5432
@@ -44,48 +53,62 @@ POSTGRES_USER=hm_admin
 POSTGRES_PASSWORD=change_me
 ```
 
-Le conteneur Spark ne connaît ces variables que si `.env` est monté ou déclaré en `env_file` sur **tous** les services Spark (`spark-master` **et** `spark-worker`) — pas seulement sur `postgres`.
+The Spark container only sees these variables if `.env` is mounted or declared as `env_file` on
+**all** Spark services (`spark-master` **and** `spark-worker`) — not just on `postgres`.
 
 ---
 
-## 4. Structure du projet et rôle de chaque fichier
+## 4. Project structure and role of each file
 
-| Fichier | Rôle |
+| File | Role |
 |---|---|
-| `config.py` | Centralise la création de la `SparkSession` (`get_spark_session()`) et la configuration de connexion JDBC (`get_jdbc_config()`). |
-| `schemas.py` | Définit explicitement le schéma (types de colonnes) des fichiers CSV `transactions`, `customers`, `articles` — pas de nettoyage ici. |
-| `cleaning.py` | Reproduit le nettoyage réalisé dans le notebook d'EDA : imputation, conversion de dates, création de tranches d'âge. |
-| `features.py` | Calcule les features RFM et enrichies par client, construit les tables d'agrégation métier, puis le Data Warehouse (dimensions + faits) et les Data Marts. |
+| `config.py` | Centralizes the creation of the `SparkSession` (`get_spark_session()`) and the JDBC connection configuration (`get_jdbc_config()`). |
+| `schemas.py` | Explicitly defines the schema (column types) of the `transactions`, `customers`, `articles` CSV files — no cleaning here. |
+| `cleaning.py` | Reproduces the cleaning done in the EDA notebook: imputation, date conversion, age-bin creation. |
+| `features.py` | Computes the RFM and enriched per-customer features, builds the business aggregation tables, then the Data Warehouse (dimensions + facts) and the Data Marts. |
 
 ### 4.1 `config.py`
 
-`get_spark_session()` crée la `SparkSession`, la nomme (`appName("hm_pipeline")`), pointe vers le cluster (`master("spark://spark-master:7077")`) et charge le driver JDBC. `get_jdbc_config()` retourne l'URL JDBC et les identifiants, pour éviter de les répéter dans chaque script.
+`get_spark_session()` creates the `SparkSession`, names it (`appName("hm_pipeline")`), points it
+to the cluster (`master("spark://spark-master:7077")`), and loads the JDBC driver.
+`get_jdbc_config()` returns the JDBC URL and credentials, avoiding repeating them in every script.
 
-> **Spark Master vs Spark Worker, en bref** : le **Master** coordonne le cluster (il reçoit les jobs soumis, connaît la liste des workers disponibles, répartit le travail) — il n'exécute aucun calcul lui-même. Le **Worker** exécute réellement les tâches (lecture des CSV, jointures, agrégations) avec les ressources qu'il a déclarées au Master. `spark-submit` peut être lancé depuis n'importe quel conteneur ayant accès réseau au Master et aux fichiers du job — y compris depuis le conteneur `spark-worker` lui-même (voir section 9).
+> **Spark Master vs Spark Worker, in short**: the **Master** coordinates the cluster (receives
+> submitted jobs, knows the list of available workers, distributes the work) — it doesn't run any
+> computation itself. The **Worker** actually executes the tasks (reading CSVs, joins,
+> aggregations) with the resources it has declared to the Master. `spark-submit` can be launched
+> from any container with network access to the Master and the job's files — including from the
+> `spark-worker` container itself (see section 9).
 
 ### 4.2 `schemas.py`
 
-Définit un schéma explicite (`StructType`) plutôt que `inferSchema=True`, pour des raisons de performance, de fiabilité des types et de reproductibilité. Toutes les colonnes du fichier `customers.csv` sont lues, **y compris `FN` et `Active`**, avec leur type d'origine.
+Defines an explicit schema (`StructType`) rather than `inferSchema=True`, for performance,
+type-reliability, and reproducibility reasons. Every column of `customers.csv` is read,
+**including `FN` and `Active`**, with its original type.
 
 ### 4.3 `cleaning.py`
 
-| Fonction | Traitement |
+| Function | Treatment |
 |---|---|
-| `clean_customers()` | Supprime explicitement `FN` et `Active` (`.drop("FN", "Active")`) — un `NaN` sur ces colonnes signifie une absence réelle d'abonnement selon l'EDA, pas une valeur à imputer. Âge imputé par la **médiane** (`approxQuantile`) ; statut club et fréquence newsletter imputés par le **mode** ; création de tranches d'âge (`age_group`). |
-| `clean_articles()` | Aucune imputation (0,4 % de valeurs manquantes sur `detail_desc`, jugé négligeable). |
-| `clean_transactions()` | Conversion de `t_dat` en type `Date`, aucun filtre ni dédoublonnage. |
+| `clean_customers()` | Explicitly drops `FN` and `Active` (`.drop("FN", "Active")`) — a `NaN` in these columns means a genuine absence of subscription according to the EDA, not a value to impute. Age imputed with the **median** (`approxQuantile`); club status and newsletter frequency imputed with the **mode**; age-bin creation (`age_group`). |
+| `clean_articles()` | No imputation (0.4% missing values on `detail_desc`, judged negligible). |
+| `clean_transactions()` | Converts `t_dat` to `Date` type, no filtering or deduplication. |
 
-Faire ce tri dans `cleaning.py` plutôt qu'à la lecture (`schemas.py`) rend la décision de nettoyage explicite et traçable, au bon endroit du pipeline.
+Making this call in `cleaning.py` rather than at read time (`schemas.py`) makes the cleaning
+decision explicit and traceable, at the right place in the pipeline.
 
 ### 4.4 `features.py`
 
-**Features RFM par client** : `total_spend` (Monetary), `n_transactions` (Frequency), `recency_days` depuis `DATASET_END = "2020-09-22"` (date fixe, dataset historique) (Recency), `tenure_days`, `avg_basket_value`, `purchase_frequency_per_month`, `n_distinct_categories`.
+**Per-customer RFM features**: `total_spend` (Monetary), `n_transactions` (Frequency),
+`recency_days` from `DATASET_END = "2020-09-22"` (fixed date, historical dataset) (Recency),
+`tenure_days`, `avg_basket_value`, `purchase_frequency_per_month`, `n_distinct_categories`.
 
-`segment_valeur` : segmentation en quartiles de `total_spend` via **`approxQuantile`**  — voir section 12 pour le détail du changement par rapport à `ntile()`.
+`segment_valeur`: `total_spend` quartile segmentation via **`approxQuantile`** — see section 11
+for the detail of the change from `ntile()`.
 
 ---
 
-## 5. Le Data Warehouse — schéma en étoile
+## 5. The Data Warehouse — star schema
 
 ```
               Dim Customer
@@ -93,44 +116,50 @@ Faire ce tri dans `cleaning.py` plutôt qu'à la lecture (`schemas.py`) rend la 
 Dim Date ─── Fact Transaction ─── Dim Article
 ```
 
-| Table | Contenu |
+| Table | Content |
 |---|---|
-| `dim_customer` | Infos descriptives client ; `customer_key` généré par hash `crc32`. |
-| `dim_article` | Infos descriptives produit ; `article_key = article_id` (déjà un entier unique). |
-| `dim_date` | Une ligne par date distincte, avec `date_key` lisible (`2020-09-22 → 20200922`). |
-| `fact_transaction` | Une ligne par achat : clés vers les dimensions + mesures (`price`, `sales_channel_id`). |
+| `dim_customer` | Descriptive customer info; `customer_key` generated via `crc32` hash. |
+| `dim_article` | Descriptive product info; `article_key = article_id` (already a unique integer). |
+| `dim_date` | One row per distinct date, with a readable `date_key` (`2020-09-22 → 20200922`). |
+| `fact_transaction` | One row per purchase: keys to the dimensions + measures (`price`, `sales_channel_id`). |
 
 ---
 
-## 6. Position des Data Marts dans le schéma en étoile
+## 6. Where the Data Marts sit in the star schema
 
-Le schéma en étoile classique a deux niveaux : les dimensions et le fait, au grain le plus fin. Les Data Marts forment un **troisième niveau** : des agrégats précalculés, un cran au-dessus du fait.
+The classic star schema has two levels: dimensions and the fact, at the finest grain. The Data
+Marts form a **third level**: precomputed aggregates, one notch above the fact.
 
-**Cœur classique — grain fin (1 ligne = 1 transaction)** : `dim_customer`, `dim_article`, `dim_date`, `fact_transaction`.
+**Classic core — fine grain (1 row = 1 transaction)**: `dim_customer`, `dim_article`, `dim_date`,
+`fact_transaction`.
 
-**Data Marts — grain agrégé** :
-- `customers_features_train` — 1 ligne = 1 client
-- `products_performance` — 1 ligne = 1 article
-- `daily_sales` — 1 ligne = 1 jour
-- `customer_segments_summary` — 1 ligne = 1 segment
+**Data Marts — aggregated grain**:
+- `customers_features_train` — 1 row = 1 customer
+- `products_performance` — 1 row = 1 article
+- `daily_sales` — 1 row = 1 day
+- `customer_segments_summary` — 1 row = 1 segment
 
-Les marts sont calculés à partir de `fact_transaction`, puis stockés à côté, dans la même base — ils ne remplacent ni les dimensions ni le fait.
+The marts are computed from `fact_transaction`, then stored alongside it, in the same database —
+they replace neither the dimensions nor the fact.
 
-### À quoi servent vraiment les Data Marts ?
+### What are the Data Marts actually for?
 
-Sans mart, chaque question métier obligerait à scanner et recalculer sur 33,7 millions de lignes à chaque appel.
+Without a mart, every business question would require scanning and recomputing over 33.7 million
+rows on every call.
 
-| Sans Data Mart | Avec Data Mart |
+| Without a Data Mart | With a Data Mart |
 |---|---|
-| Scanner 33,7M lignes à chaque requête | Lire 1 ligne déjà prête dans le mart |
-| Refaire un `groupBy` + agrégation à chaque appel | Aucun recalcul, donnée déjà résumée |
-| Chaque équipe réécrit sa propre requête | Une seule table de référence, partagée |
+| Scan 33.7M rows on every query | Read 1 row already ready in the mart |
+| Redo a `groupBy` + aggregation on every call | No recomputation, data already summarized |
+| Every team rewrites its own query | A single shared reference table |
 
-Au lieu que Django ou l'équipe ML recalcule le RFM en scannant 33,7M lignes à chaque appel, ils lisent directement `customers_features_train` — une ligne par client, déjà prête, à jour à chaque exécution (`mode("overwrite")`).
+Instead of Django or the ML team recomputing RFM by scanning 33.7M rows on every call, they read
+`customers_features_train` directly — one row per customer, already ready, up to date on every run
+(`mode("overwrite")`).
 
 ---
 
-## 7. Écriture finale dans PostgreSQL
+## 7. Final write to PostgreSQL
 
 ```python
 for name, df in tables.items():
@@ -141,28 +170,28 @@ for name, df in tables.items():
     )
 ```
 
-Le mode `overwrite` recrée entièrement chaque table à chaque exécution du pipeline batch.
+`overwrite` mode entirely recreates each table on every run of the batch pipeline.
 
 ---
 
-## 8. Stack technique
+## 8. Technology stack
 
-- **Docker / Docker Compose** — orchestration des services.
-- **Apache Spark (PySpark)** — traitement distribué, nettoyage, feature engineering.
-- **PostgreSQL** — stockage final du Data Warehouse et des Data Marts.
-- **JDBC** (`postgresql-42.7.3.jar`) — pont de communication entre Spark (JVM) et PostgreSQL.
-- **Adminer** — interface web de consultation de la base (voir section 10).
+- **Docker / Docker Compose** — service orchestration.
+- **Apache Spark (PySpark)** — distributed processing, cleaning, feature engineering.
+- **PostgreSQL** — final storage for the Data Warehouse and Data Marts.
+- **JDBC** (`postgresql-42.7.3.jar`) — communication bridge between Spark (JVM) and PostgreSQL.
+- **Adminer** — web interface to browse the database (see section 10).
 
 ---
 
-## 9. Lancer le pipeline
+## 9. Running the pipeline
 
 ```bash
-# 1. Démarrer l'infrastructure
+# 1. Start the infrastructure
 docker compose up -d
 
-# 2. Exécuter le job Spark — lancé depuis le conteneur worker,
-#    connecté au master via son URL réseau interne
+# 2. Run the Spark job — launched from the worker container,
+#    connected to the master via its internal network URL
 docker exec shop-spark-worker `
   /opt/spark/bin/spark-submit `
   --master spark://spark-master:7077 `
@@ -170,33 +199,37 @@ docker exec shop-spark-worker `
 
 docker exec shop-spark-worker /opt/spark/bin/spark-submit --master spark://spark-master:7077 /opt/spark/work-dir/batch_ml_pipeline/jobs/pipeline_hm.py
 ```
-À la fin de l'exécution, les 8 tables sont disponibles dans PostgreSQL : `dim_customer`, `dim_article`, `dim_date`, `fact_transaction`, `customers_features_train`, `products_performance`, `daily_sales`, `customer_segments_summary`.
+At the end of the run, 8 tables are available in PostgreSQL: `dim_customer`, `dim_article`,
+`dim_date`, `fact_transaction`, `customers_features_train`, `products_performance`,
+`daily_sales`, `customer_segments_summary`.
 
-### 9.1 Consulter l'UI Spark Master
+### 9.1 Viewing the Spark Master UI
 
 | URL | Description |
 |---|---|
-| `http://localhost:8080` | UI web du Spark Master (`SPARK_MASTER_WEBUI_PORT`, voir `.env`) — liste des workers connectés, jobs en cours (`Running Applications`) et terminés, logs par exécuteur. |
-| `spark://spark-master:7077` | Port du protocole Spark lui-même (`SPARK_MASTER_PORT`) — **pas** une URL de navigateur, utilisée uniquement par `spark-submit` et les workers pour se connecter au cluster. |
+| `http://localhost:8080` | Spark Master web UI (`SPARK_MASTER_WEBUI_PORT`, see `.env`) — list of connected workers, running (`Running Applications`) and completed jobs, per-executor logs. |
+| `spark://spark-master:7077` | The Spark protocol port itself (`SPARK_MASTER_PORT`) — **not** a browser URL, used only by `spark-submit` and the workers to connect to the cluster. |
 
-Le job soumis apparaît dans la liste `Running Applications` de l'UI dès son lancement, puis passe dans `Completed Applications` une fois terminé.
+The submitted job appears in the UI's `Running Applications` list as soon as it starts, then moves
+to `Completed Applications` once done.
 
-### 9.2 Dépannage courant (Docker Desktop / Windows)
+### 9.2 Common troubleshooting (Docker Desktop / Windows)
 
-| Symptôme | Cause | Solution |
+| Symptom | Cause | Fix |
 |---|---|---|
-| `container ... is not running` sur `docker exec shop-spark-worker ...` | `spark-worker` (et/ou `spark-master`) arrêté entre deux sessions Docker Desktop | `docker compose up -d spark-master spark-worker` (ou `docker compose up -d` pour tout redémarrer d'un coup) |
-| `Bind for 0.0.0.0:XXXX failed: port is already allocated` | Un port du projet (ex. `6333`, `8080`) est déjà utilisé par un **autre** projet Docker actif sur la machine | `docker ps` pour identifier le conteneur concurrent, puis `docker stop <nom>` — ou changer le port en conflit dans `.env` |
-| `UnknownHostException: spark-master: ... Temporary failure in name resolution` dans `docker logs shop-spark-master` | Le DNS interne de Docker (résolution des noms de service, ex. `spark-master`) est dans un état incohérent — fréquent après beaucoup de conteneurs/réseaux actifs simultanément | `docker compose down` (supprime le réseau `shop_data_net`) → `wsl --shutdown` (PowerShell admin) → rouvrir Docker Desktop → `docker compose up -d` |
-| `localhost:8080` inaccessible alors que `docker ps` montre `shop-spark-master` comme `Up` | Un **autre** projet Docker utilise déjà le port 8080 (ex. phpMyAdmin d'un autre projet) | Vérifier `docker ps` pour repérer le conteneur qui occupe réellement le port, l'arrêter, puis relancer `spark-master` |
+| `container ... is not running` on `docker exec shop-spark-worker ...` | `spark-worker` (and/or `spark-master`) stopped between two Docker Desktop sessions | `docker compose up -d spark-master spark-worker` (or `docker compose up -d` to restart everything at once) |
+| `Bind for 0.0.0.0:XXXX failed: port is already allocated` | A project port (e.g. `6333`, `8080`) is already used by **another** active Docker project on the machine | `docker ps` to identify the conflicting container, then `docker stop <name>` — or change the conflicting port in `.env` |
+| `UnknownHostException: spark-master: ... Temporary failure in name resolution` in `docker logs shop-spark-master` | Docker's internal DNS (service-name resolution, e.g. `spark-master`) is in an inconsistent state — common after many containers/networks have been active simultaneously | `docker compose down` (removes the `shop_data_net` network) → `wsl --shutdown` (admin PowerShell) → reopen Docker Desktop → `docker compose up -d` |
+| `localhost:8080` unreachable even though `docker ps` shows `shop-spark-master` as `Up` | **Another** Docker project is already using port 8080 (e.g. another project's phpMyAdmin) | Check `docker ps` to spot the container actually holding the port, stop it, then restart `spark-master` |
 
 ---
 
-## 10. Visualiser le Data Warehouse via Adminer
+## 10. Viewing the Data Warehouse via Adminer
 
-**Adminer** est une interface web légère (l'équivalent de phpMyAdmin, mais compatible PostgreSQL nativement) pour consulter les tables sans terminal.
+**Adminer** is a lightweight web interface (the phpMyAdmin equivalent, but natively
+PostgreSQL-compatible) to browse the tables without a terminal.
 
-Ajout dans `docker-compose.yml`, **à l'intérieur** de `services:` :
+Add to `docker-compose.yml`, **inside** `services:`:
 
 ```yaml
   adminer:
@@ -209,26 +242,29 @@ Ajout dans `docker-compose.yml`, **à l'intérieur** de `services:` :
       - shop_data_net
 ```
 
-Lancement :
+Start it:
 ```bash
 docker compose up -d adminer
 ```
 
-Accès : `http://localhost:8081`, puis connexion avec :
+Access: `http://localhost:8081`, then log in with:
 
-| Champ | Valeur |
+| Field | Value |
 |---|---|
-| Système | PostgreSQL |
-| Serveur | `postgres` (nom du service Docker, pas `localhost`) |
-| Utilisateur | `hm_admin` |
-| Mot de passe | celui de `POSTGRES_PASSWORD` |
-| Base de données | `hm_retail` |
+| System | PostgreSQL |
+| Server | `postgres` (Docker service name, not `localhost`) |
+| Username | `hm_admin` |
+| Password | `POSTGRES_PASSWORD`'s value |
+| Database | `hm_retail` |
 
+---
 
+## 11. Why `ntile()` was replaced with `approxQuantile`
 
-### 11
-
-. Pourquoi `ntile()` a été remplacé par `approxQuantile`
-
-`Window.orderBy("total_spend")` + `ntile(4)` nécessite un tri global de toute la colonne sur **une seule partition** (`WARN WindowExec: No Partition Defined`), ce qui a fait passer le job de quelques secondes à plus de 30 minutes sur 1,36M clients. `approxQuantile` calcule les seuils (25e/50e/75e percentile) de façon distribuée, sans ce goulot d'étranglement. Conséquence : les 4 segments ne sont plus garantis à effectifs strictement égaux (ce que faisait `ntile`), mais reflètent des **seuils de dépense réels** — plus cohérent pour une segmentation marketing, et plus rapide.
+`Window.orderBy("total_spend")` + `ntile(4)` requires a global sort of the whole column on **a
+single partition** (`WARN WindowExec: No Partition Defined`), which pushed the job from a few
+seconds to over 30 minutes on 1.36M customers. `approxQuantile` computes the thresholds
+(25th/50th/75th percentile) in a distributed way, without this bottleneck. Consequence: the 4
+segments are no longer guaranteed to have strictly equal counts (which `ntile` did), but instead
+reflect **real spend thresholds** — more consistent for marketing segmentation, and faster.
 

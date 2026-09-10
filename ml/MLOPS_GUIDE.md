@@ -1,27 +1,32 @@
-# Guide MLOps — H&M Retail Intelligence Platform
+# MLOps Guide — H&M Retail Intelligence Platform
 
-Ce guide documente la mise en œuvre concrète de la pile MLOps annoncée dans `ARCHITECTURE.md` §5
-(Git, DVC, DagsHub, MLflow, GitHub Actions, Evidently AI). Il fait passer le dossier `ml/` de
-« emplacement réservé » à un pipeline exécutable de bout en bout : entraînement versionné et
-tracké, service d'inférence, monitoring de dérive, CI/CD — **branché sur la vraie source de
-données de la plateforme : la table PostgreSQL `customers_features_train`, produite par
-`spark/jobs/pipeline_hm.py`** (pas un CSV).
+<p align="center">
+  <a href="./MLOPS_GUIDE.md"><strong>🇬🇧 English</strong></a> ·
+  <a href="./MLOPS_GUIDE.fr.md">🇫🇷 Français</a>
+</p>
 
-> **À qui s'adresse ce guide ?** À toute personne qui reprend le projet après la mise en place du
-> pipeline Spark → PostgreSQL et doit soit relancer les entraînements, soit brancher le
-> backend/frontend sur les modèles, soit surveiller leur dérive en production.
+This guide documents the concrete implementation of the MLOps stack announced in
+`ARCHITECTURE.md` §5 (Git, DVC, DagsHub, MLflow, GitHub Actions, Evidently AI). It takes the `ml/`
+folder from "placeholder" to an end-to-end runnable pipeline: versioned and tracked training, an
+inference service, drift monitoring, CI/CD — **wired to the platform's real data source: the
+PostgreSQL `customers_features_train` table, produced by `spark/jobs/pipeline_hm.py`** (not a
+CSV).
+
+> **Who is this guide for?** Anyone picking up the project after the Spark → PostgreSQL pipeline
+> has been set up, who needs to either rerun training, wire the backend/frontend to the models, or
+> monitor their drift in production.
 
 ---
 
-## 1. Vue d'ensemble de la partie ML
+## 1. Overview of the ML part
 
 ```
 data/raw/*.csv (Kaggle)
         │
-        ▼  spark-submit pipeline_hm.py (voir spark/README.md)
+        ▼  spark-submit pipeline_hm.py (see spark/README.md)
 ┌─────────────────────────┐
 │  PostgreSQL              │
-│  customers_features_train│  ◀── table produite par compute_customer_features()
+│  customers_features_train│  ◀── table produced by compute_customer_features()
 │  (+ dim_*, fact_*, marts)│      (spark/utils/features.py)
 └──────────┬───────────────┘
            │  SELECT * FROM customers_features_train  (ml/common.py::load_customer_features)
@@ -31,257 +36,253 @@ data/raw/*.csv (Kaggle)
 │   (scripts, --register) │   train_regression.py      -> total_spend
 │                         │   train_clustering.py      -> segment (K-Means, k=6)
 └───────────┬─────────────┘
-           │  tracking (params, métriques, artefacts)
+           │  tracking (params, metrics, artifacts)
            ▼
 ┌───────────────────────┐
-│   MLflow Tracking       │──▶ Model Registry (alias "champion")
+│   MLflow Tracking       │──▶ Model Registry ("champion" alias)
 │   Server (Docker)       │
 └───────────┬─────────────┘
-           │  models:/<nom>@champion
+           │  models:/<name>@champion
            ▼
 ┌───────────────────────┐        ┌──────────────────────────┐
 │   ml/serving/app.py     │◀──────▶│  ml/models/*/*.joblib      │
-│   (API FastAPI)          │       │  (repli local hors MLflow) │
+│   (FastAPI API)          │       │  (local fallback outside MLflow) │
 └───────────┬─────────────┘        └──────────────────────────┘
            │ /predict/*
            ▼
-       backend/app/  (API applicative, consomme ml/serving/)
+       backend/app/  (application API, consumes ml/serving/)
 
 ┌───────────────────────┐
-│   ml/monitoring/         │  Evidently AI : rapport de dérive
-│   drift_report.py         │  (référence vs données courantes de customers_features_train)
+│   ml/monitoring/         │  Evidently AI: drift report
+│   drift_report.py         │  (reference vs current window of customers_features_train)
 └───────────────────────┘
 
-Orchestration CI/CD : .github/workflows/mlops-ci.yml
+CI/CD orchestration: .github/workflows/mlops-ci.yml
 ```
 
-Chaque script du dossier `ml/` reprend une logique déjà validée dans les notebooks (features,
-prétraitement, choix des algorithmes) : voir `ml/config.yaml` pour la correspondance exacte avec
-les notebooks 05-07, et les commentaires en tête de chaque script pour la section de notebook dont
-il s'inspire.
+Every script in the `ml/` folder reuses logic already validated in the notebooks (features,
+preprocessing, algorithm choice): see `ml/config.yaml` for the exact mapping to notebooks 05-07,
+and the comments at the top of each script for which notebook section it's based on.
 
-**Ce que ce guide couvre :** la mise en place de l'outillage (accès Postgres, MLflow, CI/CD,
-monitoring) et son usage. **Ce qu'il ne couvre pas :** la qualité prédictive des modèles eux-mêmes,
-qui dépend des vraies données Kaggle et est discutée dans `notebooks/README.md` §3 et
+**What this guide covers:** setting up the tooling (Postgres access, MLflow, CI/CD, monitoring)
+and how to use it. **What it does not cover:** the predictive quality of the models themselves,
+which depends on the real Kaggle data and is discussed in `notebooks/README.md` §3 and
 `notebooks/DETAILS.md`.
 
 ---
 
-## 2. La source des features : PostgreSQL, pas un CSV
+## 2. The source of the features: PostgreSQL, not a CSV
 
-**Point d'architecture important, à ne pas manquer** : le dossier `data/features/` du dépôt
-**n'est plus alimenté par le pipeline actif**. `spark/jobs/pipeline_hm.py` lit les CSV Kaggle
-depuis `data/raw/`, mais écrit exclusivement dans PostgreSQL (voir `spark/README.md` §5-7) — la
-table `customers_features_train` (et les autres tables du schéma en étoile) sont donc **la seule
-source de vérité** pour les features clients.
+**Important architectural point, easy to miss**: the repo's `data/features/` folder **is no
+longer fed by the active pipeline**. `spark/jobs/pipeline_hm.py` reads the Kaggle CSVs from
+`data/raw/`, but writes exclusively to PostgreSQL (see `spark/README.md` §5-7) — the
+`customers_features_train` table (and the other star-schema tables) are therefore **the single
+source of truth** for customer features.
 
-`ml/common.py::load_customer_features()` fait `SELECT * FROM customers_features_train` via
-SQLAlchemy/psycopg2, avec ces colonnes (issues de `spark/utils/features.py::compute_customer_features`) :
+`ml/common.py::load_customer_features()` runs `SELECT * FROM customers_features_train` via
+SQLAlchemy/psycopg2, with these columns (produced by
+`spark/utils/features.py::compute_customer_features`):
 
-| Colonne | Rôle |
+| Column | Role |
 |---|---|
-| `customer_key` | Identifiant client (hash `crc32`, remplace `customer_id` dans l'entrepôt) — jamais utilisé comme feature |
-| `age`, `age_group`, `club_member_status`, `fashion_news_frequency`, `postal_code` | Attributs démographiques (jointure avec `customers_clean`) |
-| `total_spend`, `n_transactions`, `first_purchase`, `last_purchase` | RFM de base |
-| `recency_days`, `tenure_days`, `avg_basket_value`, `purchase_frequency_per_month` | RFM dérivé |
-| `n_distinct_categories` | Diversité d'achat |
-| `segment_valeur` | Segment de valeur par quartile (`Bas (Q1)` → `Haut (Q4 - VIP)`), calculé par `approxQuantile` |
+| `customer_key` | Customer identifier (`crc32` hash, replaces `customer_id` in the warehouse) — never used as a feature |
+| `age`, `age_group`, `club_member_status`, `fashion_news_frequency`, `postal_code` | Demographic attributes (joined from `customers_clean`) |
+| `total_spend`, `n_transactions`, `first_purchase`, `last_purchase` | Basic RFM |
+| `recency_days`, `tenure_days`, `avg_basket_value`, `purchase_frequency_per_month` | Derived RFM |
+| `n_distinct_categories` | Purchase diversity |
+| `segment_valeur` | Value segment by quartile (`Bas (Q1)` → `Haut (Q4 - VIP)`), computed via `approxQuantile` |
 
-### Pré-requis avant d'entraîner sur les vraies données
+### Prerequisites before training on real data
 
-1. Placer les 3 CSV Kaggle (`customers.csv`, `articles.csv`, `transactions_train.csv`) dans
+1. Place the 3 Kaggle CSVs (`customers.csv`, `articles.csv`, `transactions_train.csv`) in
    `data/raw/`.
-2. Démarrer l'infrastructure : `./run.sh infra` (ou `./run.sh all`).
-3. Exécuter le job Spark (voir `spark/README.md` §9) :
+2. Start the infrastructure: `./run.sh infra` (or `./run.sh all`).
+3. Run the Spark job (see `spark/README.md` §9):
    ```bash
    docker exec shop-spark-worker \
      /opt/spark/bin/spark-submit \
      --master spark://spark-master:7077 \
      /opt/spark/work-dir/jobs/pipeline_hm.py
    ```
-4. Vérifier que la table existe (via Adminer sur `http://localhost:8081`, ou `psql`) :
+4. Check that the table exists (via Adminer at `http://localhost:8081`, or `psql`):
    ```sql
    SELECT count(*) FROM customers_features_train;
    ```
-5. Seulement à partir de là, `ml/training/train_*.py` et `ml/serving/app.py` liront les vraies
-   données. **Tant que cette table n'existe pas ou est vide**, `ml/common.py` bascule
-   automatiquement sur un jeu de données synthétique de même schéma (avec un `WARNING` explicite en
-   console) — pratique pour développer/tester sans dépendre du pipeline complet, mais à ne jamais
-   confondre avec un entraînement réel.
+5. Only from that point on will `ml/training/train_*.py` and `ml/serving/app.py` read real data.
+   **As long as this table doesn't exist or is empty**, `ml/common.py` automatically falls back to
+   a synthetic dataset with the same schema (with an explicit console `WARNING`) — handy for
+   developing/testing without depending on the full pipeline, but never to be confused with real
+   training.
 
-### Variables de connexion (`.env`)
+### Connection variables (`.env`)
 
-`ml/common.py` réutilise les variables PostgreSQL déjà définies pour le reste de la plateforme
-(`POSTGRES_PORT`, `POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD`), plus une nouvelle variable
-propre à `ml/` :
+`ml/common.py` reuses the PostgreSQL variables already defined for the rest of the platform
+(`POSTGRES_PORT`, `POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD`), plus one new variable
+specific to `ml/`:
 
 ```bash
 # .env
-POSTGRES_HOST=localhost   # scripts ml/ lancés hors Docker (port publié sur l'hôte)
+POSTGRES_HOST=localhost   # ml/ scripts run outside Docker (port published on the host)
 ```
 
-Le service `ml-serving` du `docker-compose.yml` (voir §5) force automatiquement
-`POSTGRES_HOST=postgres` (nom du service Docker) — cette variable n'a besoin d'être positionnée
-dans `.env` que pour une exécution des scripts `ml/training/`/`ml/serving/` **hors Docker**, sur un
-poste de dev.
+The `ml-serving` service in `docker-compose.yml` (see §5) automatically forces
+`POSTGRES_HOST=postgres` (the Docker service name) — this variable only needs to be set in `.env`
+for running the `ml/training/`/`ml/serving/` scripts **outside Docker**, on a dev machine.
 
 ---
 
-## 3. Deux façons d'obtenir les modèles entraînés
+## 3. Two ways to obtain the trained models
 
-### 3.0 Voie directe (recommandée) : export depuis les notebooks
+### 3.0 Direct path (recommended): export from the notebooks
 
-Les notebooks 06 et 07 contiennent, juste après la conclusion de chaque comparaison de modèles,
-une cellule `joblib.dump(...)` qui exporte **le modèle effectivement retenu** (celui documenté
-dans la synthèse §17.8) directement dans `ml/models/<tâche>/` du dépôt :
+Notebooks 06 and 07 contain, right after the conclusion of each model comparison, a
+`joblib.dump(...)` cell that exports **the model actually selected** (the one documented in the
+§17.8 summary) directly into the repo's `ml/models/<task>/`:
 
-| Notebook | Cellule d'export (après…) | Fichiers produits |
+| Notebook | Export cell (after…) | Files produced |
 |---|---|---|
-| `06_ML_Classification_Regression.ipynb` | §17.5.1 (Random Forest optimisé), avant la section boosting/SMOTE 17.5.2 | `ml/models/classification/model.joblib`, `scaler.joblib` |
-| `06_ML_Classification_Regression.ipynb` | §17.6.5 (analyse résiduelle), avant le nettoyage mémoire de fin de section | `ml/models/regression/model.joblib`, `scaler.joblib`, `selector.joblib`, `feature_columns.joblib` |
-| `07_ML_Clustering_Approfondi_Synthese.ipynb` | §17.7.5 (synthèse du clustering), avant la synthèse générale 17.8 | `ml/models/clustering/model.joblib`, `scaler.joblib` |
+| `06_ML_Classification_Regression.ipynb` | §17.5.1 (optimized Random Forest), before the boosting/SMOTE section 17.5.2 | `ml/models/classification/model.joblib`, `scaler.joblib` |
+| `06_ML_Classification_Regression.ipynb` | §17.6.5 (residual analysis), before the end-of-section memory cleanup | `ml/models/regression/model.joblib`, `scaler.joblib`, `selector.joblib`, `feature_columns.joblib` |
+| `07_ML_Clustering_Approfondi_Synthese.ipynb` | §17.7.5 (clustering summary), before the overall summary 17.8 | `ml/models/clustering/model.joblib`, `scaler.joblib` |
 
-**Marche à suivre :**
-1. Exécuter la série 01 → 07 dans l'ordre sur les vraies données Kaggle (voir `notebooks/README.md`).
-   Ces notebooks lisent encore les CSV Kaggle directement (`customers.csv`, etc. placés à côté du
-   notebook ou sur Drive) — ils sont **indépendants** du pipeline Spark/PostgreSQL, qui est le
-   chemin utilisé par `ml/training/` et le reste de la plateforme temps réel. Les deux chemins
-   partent des mêmes CSV bruts et appliquent le même nettoyage, mais restent deux exécutions
-   séparées (voir §7 "Limites").
-2. Si les notebooks sont ouverts/exécutés **depuis le dossier `notebooks/`** (cas standard en local),
-   les cellules d'export détectent automatiquement `../ml/models/` et y écrivent directement — rien
-   d'autre à faire, `ml/serving/app.py` utilisera ces fichiers dès le prochain démarrage de l'API.
-3. Sur Google Colab (ou toute exécution où `ml/` du dépôt n'est pas visible depuis le répertoire
-   courant), les cellules détectent l'absence du dossier et exportent dans
-   `<BASE_PATH>/ml_models_export/<tâche>/` à la place, avec un message explicite — il faut alors
-   copier manuellement ce dossier vers `ml/models/` du dépôt.
+**Steps to follow:**
+1. Run the 01 → 07 series in order on the real Kaggle data (see `notebooks/README.md`). These
+   notebooks still read the Kaggle CSVs directly (`customers.csv` etc. placed next to the notebook
+   or on Drive) — they are **independent** from the Spark/PostgreSQL pipeline, which is the path
+   used by `ml/training/` and the rest of the real-time platform. Both paths start from the same
+   raw CSVs and apply the same cleaning, but remain two separate runs (see §7 "Limitations").
+2. If the notebooks are opened/run **from the `notebooks/` folder** (the standard local case), the
+   export cells automatically detect `../ml/models/` and write there directly — nothing else to
+   do, `ml/serving/app.py` will use these files as soon as the API is next started.
+3. On Google Colab (or any run where the repo's `ml/` isn't visible from the current directory),
+   the cells detect the folder is missing and export to
+   `<BASE_PATH>/ml_models_export/<task>/` instead, with an explicit message — you then need to
+   manually copy this folder into the repo's `ml/models/`.
 
-Ces cellules exportent **exactement** l'objet modèle qui a servi à produire les métriques déjà
-affichées dans le notebook (`gs_rf.best_estimator_`, `fitted_reg_v2[best_reg_v2_name][0]`,
-`kmeans_v2`) — pas une réimplémentation. Aucun `label_encoder.joblib` n'est exporté pour la
-classification : le `RandomForestClassifier` est entraîné directement sur les labels texte
-(`club_member_status`), et `ml/serving/app.py` gère nativement ce cas (utilise `model.classes_`).
+These cells export **exactly** the model object that produced the metrics already shown in the
+notebook (`gs_rf.best_estimator_`, `fitted_reg_v2[best_reg_v2_name][0]`, `kmeans_v2`) — not a
+reimplementation. No `label_encoder.joblib` is exported for classification: the
+`RandomForestClassifier` is trained directly on the text labels (`club_member_status`), and
+`ml/serving/app.py` natively handles this case (uses `model.classes_`).
 
-> **Pourquoi ces cellules n'existaient pas dès l'origine ?** Un notebook Jupyter (`.ipynb`) ne
-> conserve que le code et les sorties déjà affichées (texte, graphiques) — jamais les objets Python
-> entraînés en mémoire. Sans cellule d'export explicite, un modèle entraîné dans un notebook est
-> irrécupérable une fois la session fermée.
+> **Why didn't these cells exist from the start?** A Jupyter notebook (`.ipynb`) only keeps the
+> code and the outputs already displayed (text, charts) — never the trained Python objects held in
+> memory. Without an explicit export cell, a model trained in a notebook is unrecoverable once the
+> session is closed.
 
-### 3.1 Voie alternative : scripts `ml/training/` (CI, ré-entraînement automatisé, données Postgres)
+### 3.1 Alternative path: `ml/training/` scripts (CI, automated retraining, Postgres data)
 
-Pour un ré-entraînement scriptable (CI/CD, cron, sans repasser par Jupyter) **et branché sur les
-données à jour de la plateforme temps réel** (table `customers_features_train`, rafraîchie à
-chaque exécution du pipeline Spark), les scripts `ml/training/train_*.py` reproduisent la même
-recette exacte (mêmes hyperparamètres, même sélection de features) que les notebooks — voir tableau
-récapitulatif au §4. Contrairement aux notebooks, ces scripts lisent PostgreSQL et non des CSV : ils
-reflètent donc les données les plus récentes traitées par Spark, pas nécessairement celles vues au
-moment de l'exécution des notebooks 01-07.
+For scriptable retraining (CI/CD, cron, without going back through Jupyter) **and wired to the
+real-time platform's up-to-date data** (the `customers_features_train` table, refreshed on every
+run of the Spark pipeline), the `ml/training/train_*.py` scripts reproduce the exact same recipe
+(same hyperparameters, same feature selection) as the notebooks — see the summary table in §4.
+Unlike the notebooks, these scripts read PostgreSQL, not CSVs: they therefore reflect the most
+recent data processed by Spark, not necessarily what was seen at the time the 01-07 notebooks ran.
 
-Les deux voies produisent des artefacts compatibles avec `ml/serving/app.py` (mêmes noms de
-fichiers), donc interchangeables selon le contexte : notebooks pour une revue humaine avec
-visualisations sur un instantané CSV, scripts pour l'automatisation sur les données live de
-l'entrepôt.
+Both paths produce artifacts compatible with `ml/serving/app.py` (same file names), so they're
+interchangeable depending on context: notebooks for human review with visualizations on a CSV
+snapshot, scripts for automation on the warehouse's live data.
 
 ---
 
-## 4. Tracking d'expériences & Model Registry — MLflow
+## 4. Experiment tracking & Model Registry — MLflow
 
-### Démarrer un serveur MLflow
+### Starting an MLflow server
 
-En local avec Docker Compose (service `mlflow` ajouté à `docker-compose.yml`) :
+Locally with Docker Compose (the `mlflow` service added to `docker-compose.yml`):
 ```bash
-cp .env.example .env      # si pas déjà fait — définit MLFLOW_PORT (5000 par défaut)
-./run.sh ml                # démarre mlflow + ml-serving (ou ./run.sh all pour toute la stack)
+cp .env.example .env      # if not already done — defines MLFLOW_PORT (5000 by default)
+./run.sh ml                # starts mlflow + ml-serving (or ./run.sh all for the full stack)
 ```
-L'UI est disponible sur `http://localhost:5000` : expériences, comparaison de runs, courbes de
-métriques, registre de modèles.
+The UI is available at `http://localhost:5000`: experiments, run comparison, metric curves, model
+registry.
 
-En local sans Docker (poste de dev) :
+Locally without Docker (dev machine):
 ```bash
 pip install -r ml/requirements.txt
 mlflow server --backend-store-uri sqlite:///mlflow.db --default-artifact-root ./mlruns_artifacts --port 5000
-export MLFLOW_TRACKING_URI=http://localhost:5000   # ou le mettre dans .env
+export MLFLOW_TRACKING_URI=http://localhost:5000   # or set it in .env
 ```
 
-> **Pourquoi SQLite/Postgres et pas le backend fichier (`./mlruns`) ?** Les versions récentes de
-> MLflow ont mis le backend fichier en maintenance : le Model Registry (nécessaire pour `--register`)
-> exige un backend base de données. `sqlite:///mlflow.db` suffit pour un usage local ; en production,
-> pointer vers la base PostgreSQL déjà présente dans `docker-compose.yml` (créer un schéma/une base
-> dédiée à MLflow, distincte de `hm_retail`, pour ne pas mélanger tracking ML et données métier).
+> **Why SQLite/Postgres and not the file backend (`./mlruns`)?** Recent MLflow versions have put
+> the file backend into maintenance mode: the Model Registry (needed for `--register`) requires a
+> database backend. `sqlite:///mlflow.db` is enough for local use; in production, point to the
+> PostgreSQL database already present in `docker-compose.yml` (create a schema/database dedicated
+> to MLflow, separate from `hm_retail`, so ML tracking doesn't mix with business data).
 
-### Lancer un entraînement (avec tracking, données PostgreSQL si disponibles)
+### Running a training run (with tracking, PostgreSQL data if available)
 ```bash
-python ml/training/train_classification.py            # tracke le run, sans enregistrer le modèle
-python ml/training/train_classification.py --register  # + enregistre dans le Model Registry
+python ml/training/train_classification.py            # tracks the run, without registering the model
+python ml/training/train_classification.py --register  # + registers it in the Model Registry
 python ml/training/train_regression.py --register
 python ml/training/train_clustering.py --register
 ```
-Chaque script :
-1. charge la table `customers_features_train` depuis PostgreSQL (ou génère un jeu synthétique de
-   même schéma si la connexion échoue ou si la table est vide — pratique en CI/démo, voir
-   avertissement affiché dans la console) ;
-2. reproduit le prétraitement du notebook correspondant (standardisation, one-hot, sélection de
-   features pour la régression) ;
-3. entraîne **exactement le modèle retenu dans le notebook** (voir tableau ci-dessous), pas une
-   réimplémentation approximative — les hyperparamètres viennent directement des résultats déjà
-   exécutés dans les notebooks 06-07 ;
-4. logge dans MLflow : hyperparamètres, métriques (F1-macro/accuracy, RMSE/MAE/R², silhouette),
-   et le modèle lui-même (flavor MLflow adapté à l'algorithme) ;
-5. sauvegarde aussi une copie locale dans `ml/models/<tâche>/` pour le repli hors-MLflow de l'API
-   de service (§5).
+Each script:
+1. loads the `customers_features_train` table from PostgreSQL (or generates a synthetic dataset
+   with the same schema if the connection fails or the table is empty — handy in CI/demos, see the
+   warning shown in the console);
+2. reproduces the preprocessing from the corresponding notebook (standardization, one-hot,
+   feature selection for regression);
+3. trains **exactly the model selected in the notebook** (see table below), not an approximate
+   reimplementation — the hyperparameters come directly from results already run in notebooks
+   06-07;
+4. logs to MLflow: hyperparameters, metrics (F1-macro/accuracy, RMSE/MAE/R², silhouette), and the
+   model itself (MLflow flavor matching the algorithm);
+5. also saves a local copy to `ml/models/<task>/` for the serving API's fallback outside MLflow
+   (§5).
 
-### Modèles reproduits (issus des notebooks 06-07, pas de réimplémentation « à l'estime »)
+### Reproduced models (from notebooks 06-07, not a rough reimplementation)
 
-| Tâche | Modèle retenu | Provenance | Résultat (notebook) |
+| Task | Selected model | Source | Result (notebook) |
 |---|---|---|---|
-| Classification `club_member_status` | `RandomForestClassifier(n_estimators=200, max_depth=20, min_samples_leaf=5, class_weight="balanced")` — **sans SMOTE** | `best_params_` exact de `GridSearchCV`, notebook 06 §17.5.1 | F1-macro=0.3889 (bat CatBoost+SMOTE à 0.3652, §17.5.2) |
-| Régression `total_spend` | `SelectKBest(f_regression, k=12)` puis `XGBRegressor(random_state=42)` (hyperparamètres par défaut) sur `log1p(total_spend)` | Notebook 06 §17.6.2 et §17.6.4 | R²(test, log)=0.943 |
-| Clustering | `KMeans(n_clusters=6, n_init=10)` | Notebook 07 §17.7.2 (bat GMM et hiérarchique en silhouette) | Silhouette=0.2537 |
+| `club_member_status` classification | `RandomForestClassifier(n_estimators=200, max_depth=20, min_samples_leaf=5, class_weight="balanced")` — **without SMOTE** | Exact `best_params_` from `GridSearchCV`, notebook 06 §17.5.1 | F1-macro=0.3889 (beats CatBoost+SMOTE at 0.3652, §17.5.2) |
+| `total_spend` regression | `SelectKBest(f_regression, k=12)` then `XGBRegressor(random_state=42)` (default hyperparameters) on `log1p(total_spend)` | Notebook 06 §17.6.2 and §17.6.4 | R²(test, log)=0.943 |
+| Clustering | `KMeans(n_clusters=6, n_init=10)` | Notebook 07 §17.7.2 (beats GMM and hierarchical on silhouette) | Silhouette=0.2537 |
 
-> **Point d'attention** : les notebooks 06/07 n'exportaient eux-mêmes aucun modèle entraîné avant
-> les cellules ajoutées au §3.0 (pas de `joblib.dump`/`pickle.dump` sur les modèles finaux à
-> l'origine) — seule la synthèse §17.8 documentait le vainqueur de chaque comparaison. Les scripts
-> `ml/training/` ré-exécutent donc la même recette (mêmes hyperparamètres, même sélection de
-> features, même cible transformée) pour produire un artefact réellement servable à partir des
-> données PostgreSQL, au lieu de repartir sur des choix différents.
+> **Point to note**: notebooks 06/07 themselves did not export any trained model before the cells
+> added in §3.0 (no `joblib.dump`/`pickle.dump` on the final models originally) — only the §17.8
+> summary documented the winner of each comparison. The `ml/training/` scripts therefore re-run
+> the same recipe (same hyperparameters, same feature selection, same transformed target) to
+> produce an artifact that's actually servable from the PostgreSQL data, instead of starting over
+> with different choices.
 
-### Promouvoir un modèle en production (alias)
-MLflow 2.9+ remplace les anciens "stages" (Staging/Production) par des **alias**. Après avoir
-comparé plusieurs runs dans l'UI MLflow et choisi le meilleur :
+### Promoting a model to production (alias)
+MLflow 2.9+ replaces the old "stages" (Staging/Production) with **aliases**. After comparing
+several runs in the MLflow UI and picking the best one:
 ```bash
-mlflow models set-alias hm-club-status-classifier champion 3   # promeut la version 3
+mlflow models set-alias hm-club-status-classifier champion 3   # promotes version 3
 ```
-`ml/serving/app.py` charge systématiquement `models:/<nom>@champion` : changer l'alias suffit à
-déployer une nouvelle version sans toucher au code de service ni redéployer l'API.
+`ml/serving/app.py` always loads `models:/<name>@champion`: changing the alias is enough to deploy
+a new version without touching the serving code or redeploying the API.
 
-### Noms des modèles enregistrés
-Définis dans `ml/config.yaml` :
-| Tâche | Nom dans le Registry |
+### Names of the registered models
+Defined in `ml/config.yaml`:
+| Task | Name in the Registry |
 |---|---|
-| Classification `club_member_status` | `hm-club-status-classifier` |
-| Régression `total_spend` | `hm-spend-regressor` |
+| `club_member_status` classification | `hm-club-status-classifier` |
+| `total_spend` regression | `hm-spend-regressor` |
 | Clustering / segmentation | `hm-customer-segmentation` |
 
 ---
 
-## 5. Service d'inférence — `ml/serving/`
+## 5. Inference service — `ml/serving/`
 
-### Lancer l'API en local
+### Running the API locally
 ```bash
 pip install -r ml/requirements.txt
 uvicorn ml.serving.app:app --reload --port 8500
 ```
-Documentation interactive auto-générée : `http://localhost:8500/docs`.
+Auto-generated interactive documentation: `http://localhost:8500/docs`.
 
 ### Endpoints
-| Méthode | Route | Description |
+| Method | Route | Description |
 |---|---|---|
-| GET | `/health` | Statut de l'API + disponibilité de chaque modèle |
-| POST | `/predict/club-status` | Prédit `club_member_status` (ACTIVE / PRE-CREATE / LEFT CLUB) + probabilités |
-| POST | `/predict/segment` | Prédit le cluster K-Means (0 à 5) |
-| POST | `/predict/spend` | Prédit `total_spend` (dépense totale estimée) |
+| GET | `/health` | API status + availability of each model |
+| POST | `/predict/club-status` | Predicts `club_member_status` (ACTIVE / PRE-CREATE / LEFT CLUB) + probabilities |
+| POST | `/predict/segment` | Predicts the K-Means cluster (0 to 5) |
+| POST | `/predict/spend` | Predicts `total_spend` (estimated total spend) |
 
-Exemple d'appel :
+Example call:
 ```bash
 curl -X POST http://localhost:8500/predict/club-status \
   -H "Content-Type: application/json" \
@@ -289,212 +290,216 @@ curl -X POST http://localhost:8500/predict/club-status \
        "avg_basket_value": 42.5, "purchase_frequency_per_month": 1.8, "recency_days": 12}'
 ```
 
-### Stratégie de chargement des modèles
-1. **MLflow Model Registry**, via l'alias `champion` (`models:/<nom>@champion`), si
-   `MLFLOW_TRACKING_URI` pointe vers un serveur MLflow joignable.
-2. **Repli local automatique** sur `ml/models/<tâche>/*.joblib` sinon (poste de dev sans MLflow
-   lancé, ou premier déploiement avant configuration complète du Registry — y compris les
-   artefacts déposés directement par les cellules d'export des notebooks, §3.0).
+### Model loading strategy
+1. **MLflow Model Registry**, via the `champion` alias (`models:/<name>@champion`), if
+   `MLFLOW_TRACKING_URI` points to a reachable MLflow server.
+2. **Automatic local fallback** to `ml/models/<task>/*.joblib` otherwise (dev machine without
+   MLflow running, or first deployment before the Registry is fully configured — including
+   artifacts placed directly by the notebook export cells, §3.0).
 
-Cela permet de développer et tester l'API sans dépendre en permanence d'un serveur MLflow actif.
-Le champ `model_version` de chaque réponse indique quelle source a été utilisée
-(`"registry:champion"` ou `"local"`), utile pour le débogage et les tableaux de bord de monitoring.
+This lets the API be developed and tested without permanently depending on a live MLflow server.
+Each response's `model_version` field indicates which source was used (`"registry:champion"` or
+`"local"`), useful for debugging and monitoring dashboards.
 
-**Important** : `ml/serving/app.py` sert des modèles déjà entraînés (`ml/models/` ou le Registry) —
-il n'interroge PostgreSQL qu'au moment de l'entraînement (`ml/training/`) ou du monitoring
-(`ml/monitoring/`), jamais à l'inférence. Les features nécessaires à une prédiction sont fournies
-dans le corps de la requête HTTP par l'appelant (typiquement `backend/app/`, qui les aura
-lui-même lues depuis PostgreSQL ou calculées à la volée).
+**Important**: `ml/serving/app.py` serves already-trained models (`ml/models/` or the Registry) —
+it only queries PostgreSQL at training time (`ml/training/`) or monitoring time
+(`ml/monitoring/`), never at inference time. The features needed for a prediction are provided in
+the HTTP request body by the caller (typically `backend/app/`, which will itself have read them
+from PostgreSQL or computed them on the fly).
 
 ### Docker
 ```bash
 docker build -t hm-ml-serving ml/
 docker run -p 8500:8500 -e MLFLOW_TRACKING_URI=http://mlflow:5000 hm-ml-serving
 ```
-Ou, dans la stack complète : `./run.sh ml` (démarre `mlflow` + `ml-serving`, tous deux ajoutés à
-`docker-compose.yml`, avec `POSTGRES_HOST=postgres` positionné automatiquement pour `ml-serving`).
+Or, in the full stack: `./run.sh ml` (starts `mlflow` + `ml-serving`, both added to
+`docker-compose.yml`, with `POSTGRES_HOST=postgres` set automatically for `ml-serving`).
 
-### Intégration avec `backend/app/`
-Le backend applicatif (FastAPI/Node, à développer) doit simplement appeler ces 3 endpoints en HTTP
-interne (`http://ml-serving:8500/predict/...` dans le réseau Docker `shop_data_net`), sans jamais
-charger de modèle lui-même : cela garde la responsabilité du chargement/versionning des modèles
-entièrement dans `ml/`.
+### Integration with `backend/app/`
+The application backend (FastAPI/Node, to be developed) should simply call these 3 endpoints over
+internal HTTP (`http://ml-serving:8500/predict/...` on the `shop_data_net` Docker network), never
+loading a model itself: this keeps the responsibility for loading/versioning models entirely
+inside `ml/`.
 
 ---
 
-## 6. Monitoring de la dérive — Evidently AI
+## 6. Drift monitoring — Evidently AI
 
-### Pourquoi
-Le comportement client évolue (saisonnalité, soldes, nouveaux segments) : un modèle entraîné sur un
-instantané des données se dégrade avec le temps (*data drift* / *concept drift*). Evidently AI
-compare une fenêtre de référence (données d'entraînement) à une fenêtre courante et quantifie la
-dérive colonne par colonne.
+### Why
+Customer behavior evolves (seasonality, sales, new segments): a model trained on a snapshot of the
+data degrades over time (*data drift* / *concept drift*). Evidently AI compares a reference window
+(training data) to a current window and quantifies drift column by column.
 
-### Générer un rapport
+### Generating a report
 ```bash
-# Référence = un échantillon de customers_features_train (PostgreSQL) au moment de l'exécution.
-# Sans --current : simule une fenêtre "courante" avec une dérive volontaire (vieillissement de la
-# base, baisse de fréquence d'achat) à titre de démonstration.
+# Reference = a sample of customers_features_train (PostgreSQL) at run time.
+# Without --current: simulates a "current" window with intentional drift (aging customer base,
+# lower purchase frequency) for demonstration purposes.
 python ml/monitoring/drift_report.py
 
-# Avec un extrait réel de données plus récentes (ex. ré-export de customers_features_train après
-# une nouvelle exécution du pipeline Spark sur des données Kaggle mises à jour) :
+# With a real extract of more recent data (e.g. re-export of customers_features_train after a new
+# run of the Spark pipeline on updated Kaggle data):
 python ml/monitoring/drift_report.py --current data/processed/customers_recent.csv
 ```
-Le rapport HTML est généré dans `ml/monitoring/reports/drift_report.html` (ouvrable dans un
-navigateur) et un résumé (part de colonnes en dérive, alerte si au-dessus du seuil défini dans
-`ml/config.yaml` → `monitoring.drift_share_threshold`) est affiché en console — exploitable comme
-condition de déclenchement d'un ré-entraînement automatique en CI (§7).
+The HTML report is generated at `ml/monitoring/reports/drift_report.html` (can be opened in a
+browser) and a summary (share of drifting columns, alert if above the threshold defined in
+`ml/config.yaml` → `monitoring.drift_share_threshold`) is printed to the console — usable as a
+trigger condition for automatic retraining in CI (§7).
 
-### Limite actuelle liée au caractère batch du pipeline Spark
-Le dataset Kaggle H&M est un instantané historique figé : `spark/jobs/pipeline_hm.py` le rejoue en
-mode batch (`mode("overwrite")`, toute la table est recalculée à chaque exécution), il n'y a pas
-encore de flux Kafka réellement branché qui ferait évoluer `customers_features_train` en continu
-(voir `kafka/producers/` et `kafka/consumers/`, encore à implémenter). Tant que ce flux temps réel
-n'existe pas, "référence" et "courant" proviennent de la même exécution batch — le monitoring
-fonctionne aujourd'hui en mode exploratoire/simulé (paramètre `--current`), pas encore sur un vrai
-flux de données évolutif.
+### Current limitation tied to the batch nature of the Spark pipeline
+The Kaggle H&M dataset is a fixed historical snapshot: `spark/jobs/pipeline_hm.py` replays it in
+batch mode (`mode("overwrite")`, the whole table is recomputed on every run), there is no real
+Kafka stream actually wired in yet that would make `customers_features_train` evolve continuously
+(see `kafka/producers/` and `kafka/consumers/`, still to be implemented). As long as this
+real-time flow doesn't exist, "reference" and "current" come from the same batch run — monitoring
+today works in exploratory/simulated mode (`--current` parameter), not yet on a genuinely evolving
+data flow.
 
 ---
 
 ## 7. CI/CD — `.github/workflows/mlops-ci.yml`
 
-Trois jobs :
+Three jobs:
 
-1. **`lint-and-test`** (à chaque push/PR touchant `ml/`) : `ruff check` puis `pytest ml/tests/`.
-   Les tests s'exécutent sur le jeu de données synthétique de repli (`ml/common.py`), donc **aucune
-   base PostgreSQL n'est nécessaire en CI** — ils valident que le pipeline (features → prétraitement →
-   entraînement → tracking → service) reste exécutable de bout en bout, pas la qualité prédictive.
+1. **`lint-and-test`** (on every push/PR touching `ml/`): `ruff check` then `pytest ml/tests/`.
+   Tests run against the synthetic fallback dataset (`ml/common.py`), so **no PostgreSQL database
+   is needed in CI** — they validate that the pipeline (features → preprocessing → training →
+   tracking → serving) stays runnable end to end, not the models' predictive quality.
 
-2. **`build-serving-image`** (sur push vers `main`, après succès des tests) : construit l'image
-   Docker de `ml/serving/`. La publication vers un registre d'images (GHCR, Docker Hub…) est
-   pré-écrite en commentaire, à activer une fois le registre cible choisi.
+2. **`build-serving-image`** (on push to `main`, after tests succeed): builds the `ml/serving/`
+   Docker image. Publishing to an image registry (GHCR, Docker Hub…) is pre-written as a comment,
+   to be enabled once the target registry is chosen.
 
-3. **`scheduled-retrain`** (cron hebdomadaire + déclenchement manuel) : génère le rapport de
-   dérive et ré-entraîne/enregistre les 3 modèles dans le Model Registry MLflow, **en lisant
-   `customers_features_train` sur une instance PostgreSQL accessible depuis le runner**. Un runner
-   GitHub-hosted classique ne peut pas atteindre un `docker-compose` lancé en local sur un
-   ordinateur : ce job suppose soit un runner **self-hosted** sur le même réseau que la stack, soit
-   une instance PostgreSQL/MLflow de staging/prod exposée avec des identifiants dédiés en secrets.
-   Reste "best effort" tant que ces secrets ne sont pas configurés (repli automatique sur les
-   données synthétiques, comme en local).
+3. **`scheduled-retrain`** (weekly cron + manual trigger): generates the drift report and
+   retrains/registers the 3 models in the MLflow Model Registry, **reading
+   `customers_features_train` from a PostgreSQL instance reachable from the runner**. A standard
+   GitHub-hosted runner cannot reach a `docker-compose` stack running locally on a laptop: this job
+   assumes either a **self-hosted** runner on the same network as the stack, or a staging/prod
+   PostgreSQL/MLflow instance exposed with dedicated credentials in secrets. It stays "best effort"
+   as long as these secrets aren't configured (automatic fallback to synthetic data, same as
+   locally).
 
-### Secrets GitHub à configurer (Settings → Secrets and variables → Actions)
-| Secret | Utilisé pour |
+### GitHub secrets to configure (Settings → Secrets and variables → Actions)
+| Secret | Used for |
 |---|---|
-| `MLFLOW_TRACKING_URI` | Pointer le ré-entraînement planifié vers le serveur MLflow de production |
-| `POSTGRES_HOST` / `POSTGRES_PORT` / `POSTGRES_DB` / `POSTGRES_USER` / `POSTGRES_PASSWORD` | Lire `customers_features_train` sur l'instance PostgreSQL de production/staging |
-| `DAGSHUB_USER` / `DAGSHUB_TOKEN` | `dvc pull` des CSV bruts versionnés depuis DagsHub (optionnel, voir §8) |
+| `MLFLOW_TRACKING_URI` | Points scheduled retraining to the production MLflow server |
+| `POSTGRES_HOST` / `POSTGRES_PORT` / `POSTGRES_DB` / `POSTGRES_USER` / `POSTGRES_PASSWORD` | Reads `customers_features_train` from the production/staging PostgreSQL instance |
+| `DAGSHUB_USER` / `DAGSHUB_TOKEN` | `dvc pull` of the versioned raw CSVs from DagsHub (optional, see §8) |
 
 ---
 
-## 8. Versioning des données brutes — DVC + DagsHub (portée réduite)
+## 8. Raw data versioning — DVC + DagsHub (reduced scope)
 
-DVC dans ce projet **ne verse pas les features** (elles vivent dans PostgreSQL, pas dans un
-fichier) : sa portée se limite aux **CSV Kaggle bruts** (`data/raw/`), consommés en entrée par
+DVC in this project **does not version the features** (they live in PostgreSQL, not in a file):
+its scope is limited to the **raw Kaggle CSVs** (`data/raw/`), consumed as input by
 `spark/jobs/pipeline_hm.py`.
 
 ```bash
-# Une fois (déjà fait dans ce dépôt, voir .dvc/) :
+# Once (already done in this repo, see .dvc/):
 dvc init
 
-# Déclarer le remote DagsHub (déjà pré-rempli dans .dvc/config, à adapter) :
+# Declare the DagsHub remote (already pre-filled in .dvc/config, to adapt):
 dvc remote modify dagshub url https://dagshub.com/<user>/HM-Retail-Intelligence-platform.dvc
 dvc remote modify dagshub --local auth basic
-dvc remote modify dagshub --local user <votre_user_dagshub>
-dvc remote modify dagshub --local password <votre_token_dagshub>
+dvc remote modify dagshub --local user <your_dagshub_user>
+dvc remote modify dagshub --local password <your_dagshub_token>
 
-# Versionner les CSV Kaggle bruts
+# Version the raw Kaggle CSVs
 dvc add data/raw/customers.csv data/raw/articles.csv data/raw/transactions_train.csv
 git add data/raw/*.dvc .gitignore
-git commit -m "Versionne les données brutes Kaggle (DVC)"
+git commit -m "Version the raw Kaggle data (DVC)"
 dvc push
 ```
 
-`dvc.yaml` déclare les étapes d'entraînement (`train_classification`, `train_regression`,
-`train_clustering`, `drift_report`) avec le **code** comme dépendance (scripts, `common.py`,
-`config.yaml`) — pas la table Postgres, que DVC ne peut pas suivre comme un fichier. Concrètement,
-`dvc repro` rejoue un entraînement si le code change, mais ne détecte **pas** un changement de
-contenu de `customers_features_train` (nouvelle exécution du pipeline Spark). Pour forcer un
-ré-entraînement après une mise à jour des données, utiliser `dvc repro --force`, ou déclencher les
-stages explicitement (n8n, CI planifiée) après le job Spark — voir le commentaire en tête de
-`dvc.yaml`.
+`dvc.yaml` declares the training stages (`train_classification`, `train_regression`,
+`train_clustering`, `drift_report`) with the **code** as a dependency (scripts, `common.py`,
+`config.yaml`) — not the Postgres table, which DVC can't track like a file. In practice, `dvc
+repro` replays a training run if the code changes, but **does not** detect a change in
+`customers_features_train`'s content (a new run of the Spark pipeline). To force a retrain after a
+data update, use `dvc repro --force`, or trigger the stages explicitly (n8n, scheduled CI) after
+the Spark job — see the comment at the top of `dvc.yaml`.
 
 ---
 
-## 9. Démarrage rapide (résumé)
+## 9. Quick start (summary)
 
-**Option A — voie directe (recommandée si vous avez les données Kaggle) :** exécuter les
-notebooks 01 → 07 dans l'ordre (`notebooks/README.md`). Les cellules d'export de 06 et 07 déposent
-automatiquement les 3 modèles dans `ml/models/`. Passer directement à l'étape 4 ci-dessous.
+**Option A — direct path (recommended if you have the Kaggle data):** run notebooks 01 → 07 in
+order (`notebooks/README.md`). The export cells in 06 and 07 automatically drop the 3 models into
+`ml/models/`. Jump straight to step 4 below.
 
-**Option B — pipeline complet Spark → PostgreSQL → scripts (recommandé pour la plateforme temps réel) :**
+**Option B — full Spark → PostgreSQL → scripts pipeline (recommended for the real-time
+platform):**
 
 ```bash
-# 0. Dépendances Python + infrastructure
+# 0. Python dependencies + infrastructure
 pip install -r ml/requirements.txt
 cp .env.example .env
-./run.sh infra                  # démarre kafka, postgres, adminer, qdrant, n8n, mlflow
+./run.sh infra                  # starts kafka, postgres, adminer, qdrant, n8n, mlflow
 
-# 1. Placer les CSV Kaggle dans data/raw/, puis exécuter le pipeline Spark
+# 1. Place the Kaggle CSVs in data/raw/, then run the Spark pipeline
 docker exec shop-spark-worker \
   /opt/spark/bin/spark-submit --master spark://spark-master:7077 \
   /opt/spark/work-dir/jobs/pipeline_hm.py
 
-# 2. Entraîner les 3 modèles (lit customers_features_train depuis PostgreSQL)
+# 2. Train the 3 models (reads customers_features_train from PostgreSQL)
 python ml/training/train_classification.py --register
 python ml/training/train_regression.py --register
 python ml/training/train_clustering.py --register
 
-# 3. Promouvoir les versions retenues (après revue dans l'UI MLflow sur http://localhost:5000)
+# 3. Promote the selected versions (after review in the MLflow UI at http://localhost:5000)
 mlflow models set-alias hm-club-status-classifier champion 1
 mlflow models set-alias hm-spend-regressor champion 1
 mlflow models set-alias hm-customer-segmentation champion 1
 ```
 
-**Dans les deux cas ensuite :**
+**Then, in both cases:**
 
 ```bash
-# 4. Démarrer l'API d'inférence
+# 4. Start the inference API
 uvicorn ml.serving.app:app --reload --port 8500
 # -> http://localhost:8500/docs
 
-# 5. Générer un rapport de dérive
+# 5. Generate a drift report
 python ml/monitoring/drift_report.py
 
-# 6. Lancer les tests
+# 6. Run the tests
 pytest ml/tests/ -v
 ruff check ml/ --exclude ml/models
 ```
 
 ---
 
-## 10. Limites actuelles & prochaines étapes
+## 10. Current limitations & next steps
 
-- **Deux chemins de données non unifiés** : les notebooks (§3.0) lisent des CSV Kaggle
-  directement, tandis que les scripts `ml/training/` (§3.1) lisent la table PostgreSQL produite par
-  Spark. Les deux appliquent le même nettoyage/les mêmes bins d'âge (vérifié colonne par colonne),
-  mais restent deux exécutions indépendantes — pas de garantie qu'elles tournent exactement sur le
-  même instantané de données à un instant donné.
-- **Pas encore de split temporel strict** pour l'entraînement (héritage des notebooks, voir
-  `notebooks/README.md` §3) : à corriger avant un vrai passage en production (entraîner sur le
-  passé, valider sur une fenêtre plus récente, pour éviter la fuite d'information temporelle).
-- **`spark/jobs/pipeline_hm.py` est un job batch** (`mode("overwrite")`, tout est recalculé à
-  chaque exécution) : pas de flux Kafka réellement branché à ce jour (`kafka/producers/` et
-  `kafka/consumers/` sont encore des emplacements réservés) — le monitoring de dérive (§6)
-  fonctionne donc en mode exploratoire/simulé faute de flux temps réel alimentant en continu
+- **Two data paths not unified**: the notebooks (§3.0) read Kaggle CSVs directly, while the
+  `ml/training/` scripts (§3.1) read the PostgreSQL table produced by Spark. Both apply the same
+  cleaning/age bins (verified column by column), but remain two independent runs — no guarantee
+  they run on exactly the same data snapshot at a given moment.
+- **No strict temporal split yet** for training (inherited from the notebooks, see
+  `notebooks/README.md` §3): to fix before a real move to production (train on the past, validate
+  on a more recent window, to avoid temporal information leakage).
+- **`spark/jobs/pipeline_hm.py` is a batch job** (`mode("overwrite")`, everything is recomputed on
+  every run): no real Kafka stream actually wired in as of today (`kafka/producers/` and
+  `kafka/consumers/` are still placeholders) — drift monitoring (§6) therefore runs in
+  exploratory/simulated mode for lack of a real-time stream continuously feeding
   `customers_features_train`.
-- **La voie notebook (§3.0) n'enregistre rien dans MLflow** : elle écrit directement les fichiers
-  dans `ml/models/`, sans passer par le tracking d'expériences ni le Model Registry (pas de
-  comparaison de runs, pas d'alias `champion` associé). Pour une traçabilité complète, ré-exécuter
-  ensuite `python ml/training/train_*.py --register` avec les mêmes données, ou logger le modèle
-  exporté manuellement via `mlflow.sklearn.log_model()` dans une cellule additionnelle.
-- **Le remote DVC DagsHub** dans `.dvc/config` est un gabarit (`<user>`) à remplacer par le vrai
-  dépôt DagsHub du projet.
-- **La publication de l'image Docker** (`build-serving-image`) n'est pas branchée à un registre
-  réel — les lignes sont pré-écrites en commentaire dans le workflow, à activer avec un registre et
-  des secrets choisis par l'équipe.
-- **Tests de qualité prédictive** (seuils minimaux de F1/RMSE avant d'autoriser un `--register`)
-  ne sont pas encore automatisés : une prochaine itération pourrait faire échouer
-  `scheduled-retrain` si les métriques d'un nouveau run sont significativement pires que celles du
-  modèle `champion` actuel (comparaison via l'API MLflow `MlflowClient().get_model_version(...)`).
+- **The notebook path (§3.0) doesn't log anything to MLflow**: it writes the files directly to
+  `ml/models/`, without going through experiment tracking or the Model Registry (no run
+  comparison, no associated `champion` alias). For full traceability, either rerun `python
+  ml/training/train_*.py --register` afterward with the same data, or log the exported model
+  manually via `mlflow.sklearn.log_model()` in an additional cell.
+- **The DagsHub DVC remote** in `.dvc/config` is a template (`<user>`) to be replaced with the
+  project's real DagsHub repo.
+- **Docker image publishing** (`build-serving-image`) isn't wired to a real registry — the lines
+  are pre-written as comments in the workflow, to be enabled with a registry and secrets chosen by
+  the team.
+- ~~Predictive quality tests (minimum thresholds before `--register`) not automated~~ —
+  **resolved**: `ml/training/training_api.py` (`POST /train/<task>` and `/train/all`) now applies
+  an absolute, per-task quality threshold (`QUALITY_GATES`: `f1_macro ≥ 0.20`, `r2_log_target ≥
+  0.50`, `silhouette_score ≥ 0.10`) that blocks any `champion` promotion below it — including when
+  there is no current champion — then compares against the existing champion via the MLflow API
+  before promoting. Tested independently in `ml/tests/test_training_api.py`. This endpoint is
+  called by the `hm-reentrainement-hebdomadaire.json` n8n workflow (see
+  `n8n/workflows/README.md`). Still to be tuned: the thresholds are intentionally low starting
+  values (block a clearly broken model, not require beating the notebooks' score) — to be
+  tightened once a run history is available in production.

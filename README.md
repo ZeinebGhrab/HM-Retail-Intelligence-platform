@@ -1,212 +1,372 @@
-# H&M Retail Intelligence Platform
+<div align="center">
 
-Plateforme data & IA construite autour du dataset Kaggle **H&M Personalized Fashion
-Recommendations**. Ce README ne décrit **que ce qui est réellement implémenté et fonctionnel
-aujourd'hui**, avec une explication claire de son fonctionnement. Les briques non implémentées sont
-listées séparément à la fin, sans être présentées comme opérationnelles.
+# 🛍️ H&M Retail Intelligence Platform
+
+**A data & AI platform built around the Kaggle H&M Personalized Fashion Recommendations dataset —
+Big Data pipeline, MLOps, real-time streaming, and orchestration.**
+
+<p align="center">
+  <a href="./README.md"><strong>🇬🇧 English</strong></a> ·
+  <a href="./README.fr.md">🇫🇷 Français</a>
+</p>
+
+[![Version](https://img.shields.io/badge/version-1.0.0-blue.svg)]()
+[![Python](https://img.shields.io/badge/Python-3.11-3776AB?logo=python&logoColor=white)]()
+[![Apache Spark](https://img.shields.io/badge/Apache%20Spark-Batch%20%2B%20Streaming-E25A1C?logo=apachespark&logoColor=white)]()
+[![Kafka](https://img.shields.io/badge/Kafka-Event%20Streaming-231F20?logo=apachekafka&logoColor=white)]()
+[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-Data%20Warehouse-4169E1?logo=postgresql&logoColor=white)]()
+[![MLflow](https://img.shields.io/badge/MLflow-Tracking%20%2B%20Registry-0194E2?logo=mlflow&logoColor=white)]()
+[![FastAPI](https://img.shields.io/badge/FastAPI-Serving%20API-009688?logo=fastapi&logoColor=white)]()
+[![XGBoost](https://img.shields.io/badge/ML-XGBoost%20%7C%20RandomForest%20%7C%20KMeans-orange)]()
+[![n8n](https://img.shields.io/badge/n8n-Orchestration-EA4B71?logo=n8n&logoColor=white)]()
+[![Grafana](https://img.shields.io/badge/Grafana-Dashboards-F46800?logo=grafana&logoColor=white)]()
+[![DVC](https://img.shields.io/badge/DVC-Data%20Versioning-13ADC7?logo=dvc&logoColor=white)]()
+[![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker&logoColor=white)]()
+[![CI/CD](https://img.shields.io/badge/CI%2FCD-GitHub%20Actions-2088FF?logo=githubactions&logoColor=white)]()
+[![License](https://img.shields.io/badge/license-Proprietary-lightgrey.svg)]()
+[![Stars](https://img.shields.io/github/stars/ZeinebGhrab/HM-Retail-Intelligence-platform?style=social)]()
+[![Forks](https://img.shields.io/github/forks/ZeinebGhrab/HM-Retail-Intelligence-platform?style=social)]()
+
+</div>
 
 ---
 
-## 1. Ce qui est implémenté, et comment ça fonctionne
+> This README describes **only what is actually implemented and functional today**, with a clear
+> explanation of how each piece works. Unimplemented pieces are listed separately in [§8](#8-whats-not-implemented-yet),
+> without ever being presented as operational.
 
-### 1.1 Vue d'ensemble du flux de données réel
+## 📑 Table of contents
+
+- [1. Overview](#1-overview)
+  - [1.1 What this platform does](#11-what-this-platform-does)
+  - [1.2 End-to-end data flow](#12-end-to-end-data-flow)
+- [2. Analytics pipeline — `notebooks/`](#2-analytics-pipeline--notebooks)
+- [3. Big Data pipeline — `spark/`](#3-big-data-pipeline--spark)
+- [4. MLOps — training, tracking & serving — `ml/`](#4-mlops--training-tracking--serving--ml)
+- [5. Real-time streaming & orchestration — `kafka/` + `n8n/`](#5-real-time-streaming--orchestration--kafka--n8n)
+- [6. Dashboards — `grafana/`](#6-dashboards--grafana)
+- [7. Docker infrastructure](#7-docker-infrastructure)
+- [8. What's not implemented yet](#8-whats-not-implemented-yet)
+- [9. Quick start](#9-quick-start)
+- [10. Repository layout](#10-repository-layout)
+- [11. Further documentation](#11-further-documentation)
+
+---
+
+## 1. Overview
+
+### 1.1 What this platform does
+
+| Capability | Implemented by |
+|---|---|
+| 📊 Deep exploratory analysis & statistically-justified data cleaning | `notebooks/` |
+| 🏗️ Batch Big Data pipeline → PostgreSQL Data Warehouse (star schema + Data Marts) | `spark/batch_ml_pipeline/` |
+| ⚡ Near real-time transaction ingestion | `kafka/` + `spark/streaming_pipeline/` |
+| 🤖 Model training, experiment tracking & registry | `ml/training/` + MLflow |
+| 🚀 Inference API (single & batch prediction) | `ml/serving/` (FastAPI) |
+| 📈 Drift monitoring | `ml/monitoring/` (Evidently AI) |
+| 🕹️ Scheduling & orchestration of the whole cycle | `n8n/workflows/` |
+| 📊 Business & ML dashboards | `grafana/` |
+| ✅ CI/CD (lint, tests, image build, scheduled retraining) | `.github/workflows/mlops-ci.yml` |
+
+### 1.2 End-to-end data flow
 
 ```
-data/raw/*.csv (Kaggle : customers, articles, transactions)
+data/raw/*.csv (Kaggle: customers, articles, transactions)
         │
         ▼  spark-submit pipeline_hm.py
-   PostgreSQL — schéma en étoile + Data Marts
-   (table clé : customers_features_train)
+   PostgreSQL — star schema + Data Marts
+   (key table: customers_features_train)
         │
         ▼  ml/training/train_*.py --register
-   MLflow — tracking d'expériences + Model Registry (alias "champion")
+   MLflow — experiment tracking + Model Registry ("champion" alias)
         │
-        ▼  models:/<nom>@champion  (ou repli local ml/models/*.joblib)
-   ml/serving/app.py — API FastAPI d'inférence (/predict/*)
+        ▼  models:/<name>@champion  (or local fallback ml/models/*.joblib)
+   ml/serving/app.py — FastAPI inference API (/predict/*)
         │
         ▼
-   ml/monitoring/drift_report.py — rapport de dérive (Evidently AI)
+   ml/monitoring/drift_report.py — drift report (Evidently AI)
+        │
+        ▼
+   grafana/ — business & ML dashboards (reads PostgreSQL)
 
-En parallèle, indépendamment de ce flux temps réel :
-notebooks/01→07 — pipeline EDA + ML complet sur un instantané CSV des mêmes données
+In parallel, independently of this batch flow:
+notebooks/01→07 — full EDA + ML pipeline on a CSV snapshot of the same data
+kafka/ + spark/streaming_pipeline/ — near real-time transaction ingestion, merged nightly
+n8n/workflows/ — schedules simulation, RFM recomputation, and weekly retraining
 ```
 
-Ce schéma est volontairement plus court que celui qu'on pourrait imaginer pour une plateforme
-« retail intelligence » complète : il ne montre que ce qui tourne réellement aujourd'hui.
+This diagram is deliberately shorter than what one might imagine for a full "retail intelligence"
+platform: it only shows what actually runs today. Every arrow above corresponds to a section
+below with the exact command to run it.
 
-### 1.2 Le pipeline analytique — `notebooks/`
+---
 
-**Ce que c'est** : une série de 7 notebooks Jupyter, déjà exécutés sur les données Kaggle réelles
-(résultats, graphiques et scores déjà visibles dans les fichiers `.ipynb`, sans rien relancer).
+## 2. Analytics pipeline — `notebooks/`
 
-**Comment ça fonctionne** : chaque notebook lit les CSV Kaggle (`data/raw/`) ou les objets produits
-par le notebook précédent (dossier `intermediate/`, généré à l'exécution, non versionné), applique
-une étape du pipeline (nettoyage, EDA, enrichissement, feature engineering, modélisation), puis
-exporte ses résultats pour le notebook suivant. Les notebooks 06 et 07 exportent en plus,
-directement, les modèles retenus (`joblib.dump`) vers `ml/models/`.
+**What it is**: a series of 7 Jupyter notebooks, already executed on the real Kaggle data
+(results, charts, and scores already visible in the `.ipynb` files — nothing needs to be re-run to
+view them).
 
-**Détail complet** : [`notebooks/README.md`](./notebooks/README.md) (ordre d'exécution, mode
-d'emploi) et [`notebooks/DETAILS.md`](./notebooks/DETAILS.md) (méthodologie).
+**How it works**: each notebook reads the Kaggle CSVs (`data/raw/`) or the objects produced by the
+previous notebook (`intermediate/` folder, generated at execution time, not versioned), applies
+one pipeline step (cleaning, EDA, enrichment, feature engineering, modeling), then exports its
+results for the next notebook. Notebooks 06 and 07 also export the selected models directly
+(`joblib.dump`) to `ml/models/`.
 
-### 1.3 Le pipeline Big Data — `spark/`
+| # | Notebook | Content |
+|---|---|---|
+| 01 | `01_EDA_Nettoyage_Clients.ipynb` | Cleaning of `customers.csv`, customer EDA |
+| 02 | `02_EDA_Produits_Transactions.ipynb` | Products EDA, chunked pass over 33.7M transactions |
+| 03 | `03_RFM_Enrichissement_Externe.ipynb` | RFM analysis, weather & public-holiday enrichment |
+| 04 | `04_FeatureEngineering_Soldes_RAG.ipynb` | Customer feature table, RAG knowledge-base export |
+| 05 | `05_ML_ReductionDim_Clustering_Rapide.ipynb` | PCA, t-SNE/UMAP, exploratory K-Means |
+| 06 | `06_ML_Classification_Regression.ipynb` | Club-status classification, spend regression |
+| 07 | `07_ML_Clustering_Approfondi_Synthese.ipynb` | In-depth clustering (k=6), ML summary |
 
-**Ce que c'est** : un job Spark batch qui transforme les 3 CSV Kaggle bruts en un Data Warehouse
-PostgreSQL prêt à l'emploi.
+📖 **Full detail**: [`notebooks/README.md`](./notebooks/README.md) (execution order, usage) and
+[`notebooks/DETAILS.md`](./notebooks/DETAILS.md) (statistical methodology, formulas, results).
 
-**Comment ça fonctionne** : `spark/jobs/pipeline_hm.py` lit `data/raw/*.csv`, applique le nettoyage
-(`spark/utils/cleaning.py` : imputation médiane/mode, tranches d'âge), calcule les features clients
-RFM (`spark/utils/features.py` : récence, fréquence, montant, diversité d'achat) et écrit le tout
-via JDBC dans PostgreSQL sous forme d'un schéma en étoile et de Data Marts — dont la table
-`customers_features_train`, qui est **la seule source de vérité** consommée ensuite par `ml/`.
+---
 
-**Lancement** :
+## 3. Big Data pipeline — `spark/`
+
+**What it is**: a batch Spark job that turns the 3 raw Kaggle CSVs into a ready-to-use PostgreSQL
+Data Warehouse.
+
+**How it works**: `spark/jobs/pipeline_hm.py` reads `data/raw/*.csv`, applies cleaning
+(`spark/utils/cleaning.py`: median/mode imputation, age buckets), computes RFM customer features
+(`spark/utils/features.py`: recency, frequency, monetary value, purchase diversity), and writes
+everything via JDBC into PostgreSQL as a star schema and Data Marts — including the
+`customers_features_train` table, which is **the single source of truth** consumed downstream by
+`ml/`.
+
+**Run it**:
 ```bash
 docker exec shop-spark-worker \
   /opt/spark/bin/spark-submit --master spark://spark-master:7077 \
   /opt/spark/work-dir/jobs/pipeline_hm.py
 ```
 
-**Détail complet** : [`spark/README.md`](./spark/README.md).
+📖 **Full detail**: [`spark/README.md`](./spark/README.md) (batch pipeline, streaming pipeline,
+n8n orchestration overview).
 
-### 1.4 Entraînement, tracking et service des modèles — `ml/`
+---
 
-**Ce que c'est** : les 3 modèles validés dans les notebooks 06-07 (classification du statut club,
-régression de la dépense totale, segmentation client), rejoués de façon scriptée et industrialisée.
+## 4. MLOps — training, tracking & serving — `ml/`
 
-**Comment ça fonctionne**, étape par étape :
-1. `ml/training/train_classification.py`, `train_regression.py`, `train_clustering.py` chargent
-   `customers_features_train` depuis PostgreSQL (`ml/common.py`), ou basculent automatiquement sur
-   un jeu de données synthétique de même schéma si la table est vide/inaccessible (utile en CI).
-2. Chaque script reproduit exactement la recette validée dans les notebooks (mêmes hyperparamètres,
-   même sélection de features), entraîne le modèle, et logge dans **MLflow** (paramètres, métriques,
-   modèle) — avec `--register` pour l'enregistrer en plus dans le **Model Registry**.
-3. `ml/serving/app.py` (API FastAPI) charge le modèle marqué avec l'alias `champion` dans le
-   Registry, ou à défaut une copie locale dans `ml/models/`, et expose 3 routes de prédiction
-   (`/predict/club-status`, `/predict/segment`, `/predict/spend`) plus `/health`.
-4. `ml/monitoring/drift_report.py` compare une fenêtre de référence et une fenêtre courante de
-   `customers_features_train` (Evidently AI) et génère un rapport HTML de dérive.
-5. `.github/workflows/mlops-ci.yml` fait tourner lint + tests à chaque push, construit l'image
-   Docker du service d'inférence sur `main`, et peut ré-entraîner/surveiller la dérive sur un cron
-   hebdomadaire.
+**What it is**: the 3 models validated in notebooks 06-07 (club-status classification, total-spend
+regression, customer segmentation), replayed in a scripted, industrialized way.
 
-**Détail complet, avec toutes les commandes** : [`ml/MLOPS_GUIDE.md`](./ml/MLOPS_GUIDE.md) — c'est
-le document le plus détaillé du dépôt, à lire en premier pour tout ce qui concerne le ML.
+**How it works**, step by step:
 
-### 1.5 Infrastructure Docker — `docker-compose.yml`
+| Step | Component | Role |
+|---|---|---|
+| 1 | `ml/training/train_*.py` | Loads `customers_features_train` from PostgreSQL (with a synthetic fallback for CI), reproduces the exact recipe validated in the notebooks, trains, and logs to MLflow |
+| 2 | MLflow (`--register`) | Experiment tracking (params, metrics, artifacts) + Model Registry, promotion via the `champion` alias |
+| 3 | `ml/serving/app.py` (FastAPI) | Loads the `champion` model (Registry, or local fallback in `ml/models/`), exposes `/predict/club-status`, `/predict/segment`, `/predict/spend`, `/predict/batch`, `/health` |
+| 4 | `ml/monitoring/drift_report.py` | Compares a reference and a current window of `customers_features_train` (Evidently AI), generates an HTML drift report |
+| 5 | `.github/workflows/mlops-ci.yml` | Lint + tests on every push, Docker image build on `main`, weekly retrain/monitor cron |
 
-**Ce que c'est** : l'orchestration de tous les conteneurs nécessaires aux parties implémentées
-ci-dessus (et de quelques briques d'infrastructure prêtes mais pas encore connectées à du code
-applicatif, voir §2).
+**Models & scores** (from notebooks 06-07, reproduced exactly by the training scripts):
 
-**Services qui supportent une partie implémentée et fonctionnelle** :
+| Task | Model | Metric |
+|---|---|---:|
+| `club_member_status` classification | Random Forest (tuned) | F1-macro = 0.3889 |
+| `total_spend` regression | XGBoost | R² (test) = 0.943 |
+| Customer segmentation | K-Means (k=6) | Silhouette = 0.2537 |
 
-| Service | Rôle concret aujourd'hui |
-|---|---|
-| `postgres` | Stocke le Data Warehouse produit par `spark/jobs/pipeline_hm.py`, dont `customers_features_train` |
-| `adminer` | Interface web pour consulter PostgreSQL (`http://localhost:8081`) |
-| `spark-master` / `spark-worker` | Exécutent `spark/jobs/pipeline_hm.py` |
-| `mlflow` | Serveur de tracking + Model Registry pour `ml/training/` et `ml/serving/` |
-| `ml-serving` | Fait tourner l'API FastAPI de `ml/serving/app.py` en conteneur |
+📖 **Full detail, with all commands**: [`ml/MLOPS_GUIDE.md`](./ml/MLOPS_GUIDE.md) — the most
+detailed document in the repo, read this first for anything ML-related.
 
-**Démarrage minimal pour le flux implémenté** (sans les services non encore branchés à du code) :
+---
+
+## 5. Real-time streaming & orchestration — `kafka/` + `n8n/`
+
+**What it is**: a second flow, independent of the batch flow described in §3, that ingests
+transactions in near real time via Kafka, plus 3 n8n workflows that schedule the whole pipeline
+(batch + streaming + retraining).
+
+**How it works**:
+
+1. `kafka/producers/transactions_producer.py` (exposed via `kafka/producers/producer_api.py`, port
+   `8090`) reads a daily CSV (`data/raw/daily/`) and publishes each transaction to the Kafka topic
+   `transactions.raw`.
+2. `spark/streaming_pipeline/jobs/streaming_job.py` continuously consumes this topic, validates
+   each message, and writes valid/rejected rows into PostgreSQL (`stream_transactions_ingested` /
+   `stream_transactions_rejected`).
+3. `spark/batch_ml_pipeline/jobs/merge_stream_to_warehouse.py` merges this streaming data into the
+   warehouse (`fact_transaction`, `dim_date`), using a watermark to process only new rows.
+4. Three n8n workflows orchestrate all of this, split into independent files in
+   [`n8n/workflows/`](./n8n/workflows/):
+
+| Workflow | Trigger | Role |
+|---|---|---|
+| [`hm-simulation-quotidienne-kafka.json`](./n8n/workflows/hm-simulation-quotidienne-kafka.json) | Daily 06:00 | Generates the day's transactions, triggers the Kafka producer |
+| [`hm-rfm-nocturne-notifications.json`](./n8n/workflows/hm-rfm-nocturne-notifications.json) | Daily 02:00 | Merges streaming into the warehouse, recomputes RFM, generates a summary via Ollama, broadcasts it |
+| [`hm-reentrainement-hebdomadaire.json`](./n8n/workflows/hm-reentrainement-hebdomadaire.json) | Monday 06:00 | Retrains the 3 ML models, promotes the champion, reloads `ml-serving` |
+
+> ⚠️ **Known limitation**: the `hm-rfm-nocturne-notifications` workflow calls endpoints (`Push
+> SSE → Django`, `Envoyer au Chatbot`, `Envoyer FCM`) that point to a Django backend, a chatbot,
+> and an FCM service **absent from this repository** — planned integrations for another project
+> (`ShopAnalytics`), not code that exists here.
+
+📖 **Full detail of every node**: [`n8n/workflows/README.md`](./n8n/workflows/README.md).
+
+---
+
+## 6. Dashboards — `grafana/`
+
+**What it is**: 5 Grafana dashboards (25 panels total), reading directly from the PostgreSQL Data
+Warehouse and Data Marts — sales overview, product analytics, customer analytics, segmentation,
+and daily performance.
+
+**How it works**: `grafana/provisioning/datasources/postgres.yml` auto-configures the PostgreSQL
+connection on startup — no manual setup needed in the UI. Every panel is a plain SQL query against
+`fact_transaction`, `dim_customer`, `dim_article`, `daily_sales`, `products_performance`, or
+`customer_segments_summary`.
+
 ```bash
-cp .env.example .env        # renseigner de vraies valeurs
+docker compose up -d grafana
+# → http://localhost:3001  (admin / hm_admin)
+```
+
+📖 **Full detail**: [`grafana/README.md`](./grafana/README.md) (setup) and
+[`grafana/README_GRAFANA.md`](./grafana/README_GRAFANA.md) (all 25 panels with their SQL queries).
+
+---
+
+## 7. Docker infrastructure
+
+**What it is**: the orchestration of all containers needed for the implemented parts above (plus a
+few infrastructure pieces that are ready but not yet wired to application code, see §8).
+
+**Services supporting an implemented, functional part**:
+
+| Service | Actual role today |
+|---|---|
+| `postgres` | Stores the Data Warehouse produced by `spark/jobs/pipeline_hm.py`, including `customers_features_train` |
+| `adminer` | Web interface to browse PostgreSQL (`http://localhost:8081`) |
+| `spark-master` / `spark-worker` | Run the batch and streaming Spark jobs |
+| `mlflow` | Tracking server + Model Registry for `ml/training/` and `ml/serving/` |
+| `ml-serving` | Runs the FastAPI API from `ml/serving/app.py` in a container |
+| `grafana` | Business & ML dashboards (§6) |
+| `n8n` | Orchestrates the batch/streaming/retraining cycle (§5) |
+| `kafka` | Event broker for near real-time ingestion (§5) |
+
+**Minimal startup for the implemented flow** (without the services not yet wired to code):
+```bash
+cp .env.example .env        # fill in real values
 docker compose up -d postgres adminer spark-master spark-worker mlflow ml-serving
 ```
 
-**Démarrage complet de l'infrastructure du dépôt** (inclut aussi les services listés au §2,
-présents dans `docker-compose.yml` mais pas encore consommés par du code applicatif) :
+**Full startup of the repo's infrastructure**:
 ```bash
-./run.sh all                # ou run.bat all sous Windows
-./run.sh status              # vérifier que les conteneurs tournent
+./run.sh all                # or run.bat all on Windows
+./run.sh status              # check that the containers are running
 ```
 
-### 1.6 Résumé : démarrage rapide du flux réellement implémenté
+---
+
+## 8. What's not implemented yet
+
+These elements exist in the repo as folders/ready Docker images, but **contain no functional
+logic** — they are placeholders (`.gitkeep`), not operational features:
+
+| Folder / service | Actual state |
+|---|---|
+| `kafka/consumers/` | Empty folder (the real "consumer" is the Spark job `spark/streaming_pipeline/jobs/streaming_job.py`, see §5) — nothing to add here unless a standalone Kafka consumer is needed. |
+| `backend/app/` | Empty folder. No application API exists between a frontend and the data/models. |
+| `frontend/src/` | Empty folder. No user interface (dashboard) exists. |
+| RAG chatbot (`ollama` + `qdrant`) | The Docker services start. `ollama` is actually called by the `hm-rfm-nocturne-notifications` n8n workflow (text summary generation), but `qdrant` receives no data: no ingestion, no collection created, no vector search wired to a frontend. |
+| n8n nodes `Push SSE → Django`, `Envoyer au Chatbot`, `Envoyer FCM` | Present in `hm-rfm-nocturne-notifications.json`, but point to a Django backend, a chatbot, and an FCM service that don't exist in this repo. |
+| `.env.example` | Missing from the repo, even though `docker-compose.yml` and this README rely on it (`cp .env.example .env`). Needs to be created before the first startup. |
+| `data/processed/`, `data/features/` | Folders inherited from an earlier pipeline version, not fed by the current code. |
+| DVC/DagsHub remote | `.dvc/config` contains a URL template, not yet pointed to a real DagsHub repo. |
+
+**Why document them anyway?** So that no one wastes time looking for code that doesn't exist, and
+so the next person picking up the project knows exactly where to start if they want to build out
+one of these pieces.
+
+---
+
+## 9. Quick start
 
 ```bash
 # 0. Configuration
 cp .env.example .env
 
-# 1. Infrastructure nécessaire au flux implémenté
+# 1. Infrastructure needed for the implemented flow
 docker compose up -d postgres adminer spark-master spark-worker mlflow ml-serving
 
-# 2. Placer les 3 CSV Kaggle dans data/raw/, puis lancer le pipeline Spark
+# 2. Place the 3 Kaggle CSVs in data/raw/, then run the Spark pipeline
 docker exec shop-spark-worker \
   /opt/spark/bin/spark-submit --master spark://spark-master:7077 \
   /opt/spark/work-dir/jobs/pipeline_hm.py
 
-# 3. Entraîner et enregistrer les 3 modèles
+# 3. Train and register the 3 models
 python ml/training/train_classification.py --register
 python ml/training/train_regression.py --register
 python ml/training/train_clustering.py --register
 
-# 4. Démarrer/consulter l'API d'inférence
+# 4. Start/check the inference API
 uvicorn ml.serving.app:app --reload --port 8500   # http://localhost:8500/docs
 
-# 5. Générer un rapport de dérive
+# 5. Generate a drift report
 python ml/monitoring/drift_report.py
+
+# 6. (optional) Dashboards
+docker compose up -d grafana                        # http://localhost:3001
 ```
 
-Détail complet de chaque commande : [`ml/MLOPS_GUIDE.md`](./ml/MLOPS_GUIDE.md) §9.
+📖 Full detail of every command: [`ml/MLOPS_GUIDE.md`](./ml/MLOPS_GUIDE.md) §9.
 
-**Consulter les résultats des notebooks sans rien exécuter** : ouvrir n'importe quel `.ipynb` de
-[`notebooks/`](./notebooks/) affiche directement ses résultats déjà calculés (graphiques, tableaux,
-scores) — aucune exécution nécessaire pour les consulter.
-
----
-
-## 2. Ce qui N'EST PAS implémenté aujourd'hui
-
-Ces éléments existent dans le dépôt sous forme de dossiers/images Docker prêts, mais **ne
-contiennent aucune logique fonctionnelle** — ce sont des emplacements réservés (`.gitkeep`), pas des
-fonctionnalités opérationnelles :
-
-| Dossier / service | État réel |
-|---|---|
-| `kafka/producers/`, `kafka/consumers/` | Dossiers vides. Le service Docker `kafka` démarre, mais rien ne publie ni ne consomme de messages : le pipeline Spark actuel lit directement les CSV, pas de flux Kafka. |
-| `n8n/workflows/` | Dossier vide. Le service `n8n` démarre, mais aucun workflow n'y est défini. |
-| `backend/app/` | Dossier vide. Aucune API applicative n'existe entre un frontend et les données/modèles. |
-| `frontend/src/` | Dossier vide. Aucune interface utilisateur (dashboard, chatbot) n'existe. |
-| Chatbot RAG (`ollama` + `qdrant`) | Les services Docker démarrent, mais rien ne les connecte à une base de connaissances ni à un frontend — le notebook 04 prépare des données qui *pourraient* servir à ce RAG, mais aucun code ne les y branche actuellement. |
-| `data/processed/`, `data/features/` | Dossiers hérités d'une version antérieure du pipeline, non alimentés par le code actuel. |
-| Remote DVC/DagsHub | `.dvc/config` contient un gabarit d'URL, pas encore pointé vers un vrai dépôt DagsHub. |
-
-**Pourquoi les documenter quand même ?** Pour que personne ne perde de temps à chercher du code
-qui n'existe pas, et pour que la prochaine personne qui reprend le projet sache exactement par où
-commencer si elle veut développer l'une de ces briques.
+**View notebook results without running anything**: opening any `.ipynb` in
+[`notebooks/`](./notebooks/) directly shows its already computed results (charts, tables,
+scores) — no execution needed to view them.
 
 ---
 
-## 3. Arborescence du dépôt
+## 10. Repository layout
 
 ```
 hm-retail-intelligence-platform/
-├── README.md                   # ce fichier
-├── ARCHITECTURE.md             # schéma technique détaillé, services Docker
-├── docker-compose.yml          # orchestration de tous les services
-├── .env.example                 # variables d'environnement à copier en .env
-├── run.sh / run.bat             # scripts de démarrage
+├── README.md / README.fr.md      # this file (EN / FR)
+├── ARCHITECTURE.md               # detailed technical diagram, Docker services
+├── docker-compose.yml            # orchestration of all services
+├── .env.example                   # environment variables to copy into .env
+├── run.sh / run.bat               # startup scripts
 │
-├── notebooks/                   # ✅ implémenté — pipeline EDA → ML (voir §1.2)
-├── data/raw/                    # ✅ utilisé — CSV Kaggle bruts
-├── data/processed/, data/features/  # ❌ non utilisés par le code actuel
-├── spark/                       # ✅ implémenté — pipeline batch → PostgreSQL (voir §1.3)
-├── ml/                           # ✅ implémenté — entraînement, MLflow, API, monitoring (voir §1.4)
-├── kafka/                        # 📂 réservé — Dockerfile prêt, producers/consumers vides
-├── n8n/workflows/                # 📂 réservé — vide
-├── backend/app/                  # 📂 réservé — vide
-└── frontend/src/                 # 📂 réservé — vide
+├── notebooks/                     # ✅ implemented — EDA → ML pipeline (§2)
+├── data/raw/                      # ✅ used — raw Kaggle CSVs
+├── data/processed/, data/features/  # ❌ not used by current code
+├── spark/                         # ✅ implemented — batch pipeline → PostgreSQL (§3)
+│                                   #    + streaming pipeline (§5)
+├── ml/                             # ✅ implemented — training, MLflow, API, monitoring (§4)
+├── kafka/                          # ✅ implemented — producer + API (§5); consumers/ empty (§8)
+├── n8n/workflows/                  # ✅ implemented — 3 separate workflows (§5)
+│   ├── hm-simulation-quotidienne-kafka.json
+│   ├── hm-rfm-nocturne-notifications.json
+│   └── hm-reentrainement-hebdomadaire.json
+├── grafana/                        # ✅ implemented — 5 dashboards, 25 panels (§6)
+├── backend/app/                    # 📂 reserved — empty
+└── frontend/src/                   # 📂 reserved — empty
 ```
 
 ---
 
-## 4. Documentation complémentaire
+## 11. Further documentation
 
-- [`ARCHITECTURE.md`](./ARCHITECTURE.md) — schéma technique complet, rôle exact de chaque service
-  Docker, distinction implémenté / non implémenté.
-- [`spark/README.md`](./spark/README.md) — pipeline Spark → PostgreSQL en détail (schéma en étoile,
-  Data Marts, lancement du job).
-- [`ml/MLOPS_GUIDE.md`](./ml/MLOPS_GUIDE.md) — guide complet de la partie ML/MLOps : entraînement,
-  MLflow, API de service, monitoring, CI/CD, DVC.
-- [`notebooks/README.md`](./notebooks/README.md) — ordre d'exécution des notebooks, mode d'emploi.
-- [`notebooks/DETAILS.md`](./notebooks/DETAILS.md) — méthodologie statistique détaillée.
+| Document | Content |
+|---|---|
+| [`ARCHITECTURE.md`](./ARCHITECTURE.md) | Full technical diagram, exact role of each Docker service, implemented / not implemented distinction |
+| [`spark/README.md`](./spark/README.md) | Spark → PostgreSQL pipeline in detail (star schema, Data Marts, running the job, n8n orchestration overview) |
+| [`spark/batch_ml_pipeline/README.md`](./spark/batch_ml_pipeline/README.md) | Batch pipeline internals: JDBC write, star schema, Data Marts, troubleshooting |
+| [`spark/streaming_pipeline/README.md`](./spark/streaming_pipeline/README.md) | Streaming pipeline internals: Kafka ingestion, validation, checkpointing |
+| [`n8n/workflows/README.md`](./n8n/workflows/README.md) | Detail of the 3 n8n workflows (nodes, triggers, services called, known limitations) |
+| [`ml/MLOPS_GUIDE.md`](./ml/MLOPS_GUIDE.md) | Full ML/MLOps guide: training, MLflow, serving API, monitoring, CI/CD, DVC |
+| [`grafana/README.md`](./grafana/README.md) | Grafana setup, provisioning, troubleshooting |
+| [`grafana/README_GRAFANA.md`](./grafana/README_GRAFANA.md) | All 25 dashboard panels with their SQL queries |
+| [`kafka/README.md`](./kafka/README.md) | Kafka producer & API detail |
+| [`notebooks/README.md`](./notebooks/README.md) | Notebook execution order, usage |
+| [`notebooks/DETAILS.md`](./notebooks/DETAILS.md) | Detailed statistical methodology, formulas, full results |

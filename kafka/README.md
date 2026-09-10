@@ -1,13 +1,21 @@
 # `kafka/`
 
-Ce dossier gère l'entrée dans le flux temps réel : il simule l'arrivée de transactions et les publie sur Kafka. Il ne contient **pas** de consumer Kafka classique — la consommation du topic est assurée par le job **Spark Structured Streaming** (`spark/streaming_pipeline/jobs/streaming_job.py`), pas par du code ici.
+<p align="center">
+  <a href="./README.md"><strong>🇬🇧 English</strong></a> ·
+  <a href="./README.fr.md">🇫🇷 Français</a>
+</p>
+
+This folder handles the entry point into the real-time flow: it simulates incoming transactions
+and publishes them to Kafka. It does **not** contain a classic Kafka consumer — the topic is
+consumed by the **Spark Structured Streaming** job (`spark/streaming_pipeline/jobs/streaming_job.py`),
+not by any code here.
 
 ```
 kafka/
-├── consumers/              ← vide (voir note ci-dessous)
+├── consumers/              ← empty (see note below)
 ├── producers/
-│   ├── producer_api.py     ← API FastAPI, point d'entrée appelé par n8n
-│   └── transactions_producer.py   ← logique du producer (lit un CSV, publie sur Kafka)
+│   ├── producer_api.py     ← FastAPI API, entry point called by n8n
+│   └── transactions_producer.py   ← producer logic (reads a CSV, publishes to Kafka)
 ├── Dockerfile
 └── requirements.txt
 ```
@@ -16,12 +24,12 @@ kafka/
 
 ## `producers/`
 
-| Fichier | Rôle |
+| File | Role |
 |---|---|
-| `transactions_producer.py` | Lit `/data/daily/transactions_<date>.csv` et publie chaque ligne comme message JSON sur le topic `transactions.raw`, avec un délai (`delay_ms`, 50 ms par défaut) entre chaque envoi pour simuler un flux réel plutôt qu'un déversement instantané. |
-| `producer_api.py` | Petit serveur FastAPI qui expose `POST /produce?date=YYYY-MM-DD` : c'est le point d'entrée que **n8n** appelle pour déclencher `produce_day()`, puisque n8n ne peut pas exécuter un script Python directement. Renvoie `404` si le fichier du jour demandé n'existe pas. |
+| `transactions_producer.py` | Reads `/data/daily/transactions_<date>.csv` and publishes each row as a JSON message to the `transactions.raw` topic, with a delay (`delay_ms`, 50 ms by default) between each send to simulate a real stream rather than an instant dump. |
+| `producer_api.py` | A small FastAPI server exposing `POST /produce?date=YYYY-MM-DD`: this is the entry point that **n8n** calls to trigger `produce_day()`, since n8n can't run a Python script directly. Returns `404` if the requested day's file doesn't exist. |
 
-Exemple d'appel :
+Example call:
 
 ```bash
 curl -X POST "http://localhost:8090/produce?date=2026-07-09"
@@ -31,13 +39,17 @@ curl -X POST "http://localhost:8090/produce?date=2026-07-09"
 
 ## `consumers/`
 
-Dossier volontairement vide (`.gitkeep` uniquement). Le rôle de "consumer" n'est pas rempli par un script Kafka classique ici : c'est le job **Spark Structured Streaming** (`spark/streaming_pipeline/jobs/streaming_job.py`) qui consomme directement le topic `transactions.raw` en continu — voir [`spark/streaming_pipeline/README.md`](../spark/streaming_pipeline/README.md).
+Deliberately empty folder (`.gitkeep` only). The "consumer" role isn't filled by a classic Kafka
+script here: it's the **Spark Structured Streaming** job
+(`spark/streaming_pipeline/jobs/streaming_job.py`) that directly consumes the `transactions.raw`
+topic continuously — see [`spark/streaming_pipeline/README.md`](../spark/streaming_pipeline/README.md).
 
 ---
 
 ## `Dockerfile`
 
-Image Python 3.11 slim contenant les dépendances système nécessaires à `confluent-kafka` (`gcc`, `librdkafka-dev`), les dépendances Python du `requirements.txt`, et qui lance par défaut :
+Python 3.11 slim image containing the system dependencies required by `confluent-kafka` (`gcc`,
+`librdkafka-dev`), the Python dependencies from `requirements.txt`, and which starts, by default:
 
 ```bash
 uvicorn producers.producer_api:app --host 0.0.0.0 --port 8090
@@ -45,14 +57,14 @@ uvicorn producers.producer_api:app --host 0.0.0.0 --port 8090
 
 ## `requirements.txt`
 
-- `fastapi`, `uvicorn` : servir `producer_api.py`.
-- `confluent-kafka==2.5.3` : client Kafka utilisé par `transactions_producer.py`.
-- `pandas` : lecture des CSV `daily/`.
-- `python-dotenv` : chargement des variables d'environnement partagées (`.env`).
+- `fastapi`, `uvicorn`: serve `producer_api.py`.
+- `confluent-kafka==2.5.3`: Kafka client used by `transactions_producer.py`.
+- `pandas`: reads the `daily/` CSVs.
+- `python-dotenv`: loads shared environment variables (`.env`).
 
 ---
 
-## Test manuel (hors n8n)
+## Manual test (outside n8n)
 
 ```bash
 docker exec -it shop-kafka-producer bash

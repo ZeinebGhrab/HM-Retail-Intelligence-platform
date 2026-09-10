@@ -32,9 +32,8 @@ def client(monkeypatch):
     # MLflow récent) contrairement à une adresse réseau injoignable, qui peut
     # traîner plusieurs dizaines de secondes en retries HTTP avant d'échouer.
     monkeypatch.setenv("MLFLOW_TRACKING_URI", "file:///tmp/hm_mlops_test_unreachable")
-    from fastapi.testclient import TestClient
-
     import app as app_module
+    from fastapi.testclient import TestClient
 
     app_module._REGISTRY.clear()
     return TestClient(app_module.app)
@@ -83,3 +82,25 @@ def test_predict_spend(client):
 def test_predict_invalid_payload(client):
     r = client.post("/predict/club-status", json={"age": -5})
     assert r.status_code == 422
+
+
+def test_predict_batch_default_body(client):
+    # Pas de corps envoyé -> valeurs par défaut de BatchPredictionRequest.
+    # PostgreSQL n'est pas disponible en CI : load_customer_features() bascule
+    # automatiquement sur le jeu de données synthétique (voir ml/common.py),
+    # donc ce test reste hermétique au réseau.
+    r = client.post("/predict/batch")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["n_customers_scored"] > 0
+    assert body["dominant_club_status"] in body["club_status_distribution"]
+    assert sum(body["club_status_distribution"].values()) == body["n_customers_scored"]
+    assert sum(body["segment_distribution"].values()) == body["n_customers_scored"]
+    assert body["predicted_spend_mean"] >= 0
+    assert set(body["model_versions"]) == {"classification", "clustering", "regression"}
+
+
+def test_predict_batch_with_limit(client):
+    r = client.post("/predict/batch", json={"limit": 100})
+    assert r.status_code == 200
+    assert r.json()["n_customers_scored"] == 100

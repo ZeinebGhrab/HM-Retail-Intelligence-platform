@@ -16,11 +16,13 @@ Endpoints :
     POST /predict/club-status
     POST /predict/spend
     POST /predict/segment
+    POST /predict/batch
 """
 from __future__ import annotations
 
 import os
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -48,8 +50,10 @@ for _p in (_ML_DIR, _THIS_DIR):
     if str(_p) not in sys.path:
         sys.path.insert(0, str(_p))
 
-from common import load_config, models_dir  # noqa: E402
+from common import load_config, load_customer_features, models_dir  # noqa: E402
 from schemas import (  # noqa: E402
+    BatchPredictionRequest,
+    BatchPredictionSummary,
     BehaviorFeatures,
     ClubStatusPrediction,
     HealthResponse,
@@ -147,6 +151,32 @@ def health() -> HealthResponse:
     return HealthResponse(status="ok", models_loaded=statuses)
 
 
+@app.post("/admin/reload-models")
+def reload_models(task: str | None = None) -> dict[str, Any]:
+    """Vide le cache mémoire (`_REGISTRY`) pour forcer le rechargement du modèle
+    "champion" au prochain appel de /predict/*.
+
+    Nécessaire car `_get_bundle` ne recharge un modèle qu'une seule fois par
+    processus (cf. commentaire sur `_REGISTRY` plus haut) : sans cet endpoint,
+    un nouveau champion promu par ml/training/training_api.py (voir
+    ml/MLOPS_GUIDE.md §10) ne serait pris en compte qu'après un redémarrage
+    manuel de ce service. Appelé par le workflow n8n juste après un
+    ré-entraînement (n8n/workflows/HM Streaming Pipeline.json).
+
+    Sans paramètre : vide tout le cache. Avec `?task=classification` (ou
+    `regression`/`clustering`) : ne vide que l'entrée correspondante.
+    """
+    if task is not None:
+        if task not in ("classification", "regression", "clustering"):
+            raise HTTPException(status_code=404, detail=f"Tâche inconnue : {task}")
+        removed = _REGISTRY.pop(task, None) is not None
+        return {"status": "ok", "cleared": [task] if removed else []}
+
+    cleared = list(_REGISTRY.keys())
+    _REGISTRY.clear()
+    return {"status": "ok", "cleared": cleared}
+
+
 @app.post("/predict/club-status", response_model=ClubStatusPrediction)
 def predict_club_status(features: BehaviorFeatures) -> ClubStatusPrediction:
     bundle = _get_bundle("classification", CONFIG["classification"]["model_name"])
@@ -211,3 +241,115 @@ def predict_spend(features: SpendFeatures) -> SpendPrediction:
 
     predicted = float(np.expm1(pred_log)) if reg_cfg["log_target"] else float(pred_log)
     return SpendPrediction(predicted_total_spend=round(predicted, 2), model_version=bundle.version)
+
+
+# --- Scoring en masse (/predict/batch) ---------------------------------------
+#
+# Les 3 fonctions ci-dessous reproduisent, de façon vectorisée sur un DataFrame
+# entier, exactement le même pré-traitement que les endpoints unitaires
+# ci-dessus (mêmes colonnes, même ordre scaler/selector) : aucune logique de
+# feature engineering n'est dupliquée, seule la forme d'entrée change
+# (DataFrame à N lignes plutôt qu'un seul objet Pydantic).
+
+
+def _predict_classification_batch(df: pd.DataFrame) -> pd.Series:
+    bundle = _get_bundle("classification", CONFIG["classification"]["model_name"])
+    X = df[CONFIG["behavior_features"]]
+
+    if bundle.version == "local":
+        X_scaled = bundle.scaler.transform(X)
+        pred = bundle.model.predict(X_scaled)
+        le = bundle.extra.get("label_encoder")
+        labels = le.inverse_transform(pred) if le else pred
+    else:
+        raw = bundle.model.predict(X)
+        labels = raw.to_numpy() if hasattr(raw, "to_numpy") else np.asarray(raw)
+
+    return pd.Series(labels, index=df.index, name="club_member_status")
+
+
+def _predict_segment_batch(df: pd.DataFrame) -> pd.Series:
+    bundle = _get_bundle("clustering", CONFIG["clustering"]["model_name"])
+    X = df[CONFIG["behavior_features"]]
+
+    if bundle.version == "local":
+        X_scaled = bundle.scaler.transform(X)
+        clusters = bundle.model.predict(X_scaled)
+    else:
+        clusters = np.asarray(bundle.model.predict(X))
+
+    return pd.Series(clusters.astype(int), index=df.index, name="segment")
+
+
+def _predict_spend_batch(df: pd.DataFrame) -> pd.Series:
+    bundle = _get_bundle("regression", CONFIG["regression"]["model_name"])
+    reg_cfg = CONFIG["regression"]
+
+    X_num = df[reg_cfg["numeric_features"]]
+    X_cat = pd.get_dummies(df[reg_cfg["categorical_features"]].astype(str))
+
+    if bundle.version == "local":
+        feature_columns = bundle.extra.get("feature_columns", list(X_num.columns) + list(X_cat.columns))
+        X_full = pd.concat([X_num, X_cat], axis=1).reindex(columns=feature_columns, fill_value=0)
+        X_scaled = bundle.scaler.transform(X_full)
+        selector = bundle.extra.get("selector")
+        X_selected = selector.transform(X_scaled) if selector is not None else X_scaled
+        pred_log = bundle.model.predict(X_selected)
+    else:
+        X_full = pd.concat([X_num, X_cat], axis=1)
+        pred_log = np.asarray(bundle.model.predict(X_full))
+
+    predicted = np.expm1(pred_log) if reg_cfg["log_target"] else pred_log
+    return pd.Series(predicted, index=df.index, name="predicted_total_spend")
+
+
+@app.post("/predict/batch", response_model=BatchPredictionSummary)
+def predict_batch(request: BatchPredictionRequest | None = None) -> BatchPredictionSummary:
+    """Score les 3 modèles sur `source_table` (par défaut `customers_features_train`)
+    et retourne un résumé agrégé — pas les prédictions ligne par ligne, pour rester
+    léger sur de gros volumes et directement exploitable par un résumé texte (ex.
+    prompt Ollama du workflow n8n `hm-rfm-nocturne-notifications`).
+
+    Corps attendu (tous les champs sont optionnels) :
+        {"source_table": "customers_features_train", "limit": 5000}
+    """
+    req = request or BatchPredictionRequest()
+
+    try:
+        df = load_customer_features(CONFIG, table_override=req.source_table)
+    except Exception as e:
+        raise HTTPException(
+            status_code=503,
+            detail=f"Impossible de charger la table '{req.source_table}' : {type(e).__name__}: {e}",
+        )
+
+    if df.empty:
+        raise HTTPException(status_code=503, detail=f"La table '{req.source_table}' est vide.")
+
+    if req.limit is not None and len(df) > req.limit:
+        df = df.sample(n=req.limit, random_state=42)
+
+    club_status_pred = _predict_classification_batch(df)
+    segment_pred = _predict_segment_batch(df)
+    spend_pred = _predict_spend_batch(df)
+
+    club_status_counts = club_status_pred.value_counts()
+    segment_counts = segment_pred.value_counts().sort_index()
+
+    return BatchPredictionSummary(
+        generated_at=datetime.now(timezone.utc).isoformat(),
+        source_table=req.source_table,
+        n_customers_scored=len(df),
+        club_status_distribution={str(k): int(v) for k, v in club_status_counts.items()},
+        dominant_club_status=str(club_status_counts.idxmax()),
+        segment_distribution={str(int(k)): int(v) for k, v in segment_counts.items()},
+        dominant_segment=int(segment_counts.idxmax()),
+        predicted_spend_mean=round(float(spend_pred.mean()), 2),
+        predicted_spend_median=round(float(spend_pred.median()), 2),
+        predicted_spend_total=round(float(spend_pred.sum()), 2),
+        model_versions={
+            "classification": _REGISTRY["classification"].version,
+            "clustering": _REGISTRY["clustering"].version,
+            "regression": _REGISTRY["regression"].version,
+        },
+    )

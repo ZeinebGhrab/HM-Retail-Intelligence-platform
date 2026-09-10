@@ -1,0 +1,121 @@
+{
+  "name": "HM - Simulation quotidienne (Kafka producer)",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 6 * * *"
+            }
+          ]
+        }
+      },
+      "id": "075915c7-10d9-496e-b5bd-e650a010c439",
+      "name": "Déclencheur - Simulation quotidienne",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const today = new Date();\ntoday.setHours(0, 0, 0, 0); // normaliser à minuit\n\nreturn [{ json: { date: today.toISOString().split('T')[0] } }];"
+      },
+      "id": "78d155a0-abed-432e-b91a-477248688ce3",
+      "name": "Calculer la date simulée1",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        224,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=http://generator_api:8089/generate?date={{$json.date}}&rows=5",
+        "options": {
+          "timeout": 120000
+        }
+      },
+      "id": "f7bb8887-872e-44a1-a634-7619bd8d4997",
+      "name": "Générer les transactions du jour",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        448,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=http://kafka-producer-api:8090/produce?date={{ $json.date }}",
+        "options": {
+          "timeout": 7200000
+        }
+      },
+      "id": "84ff65db-b0fb-4656-9c42-a8b63bd9659f",
+      "name": "Déclencher le producer Kafka",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        672,
+        0
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Déclencheur - Simulation quotidienne": {
+      "main": [
+        [
+          {
+            "node": "Calculer la date simulée1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Générer les transactions du jour": {
+      "main": [
+        [
+          {
+            "node": "Déclencher le producer Kafka",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calculer la date simulée1": {
+      "main": [
+        [
+          {
+            "node": "Générer les transactions du jour",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "ec75dbc9-4c7c-4e75-bb32-978b1706d1a5",
+  "meta": {
+    "instanceId": "f15849fb7803decc780e9ebdd4c4d1f48ec9ba90690a703e071c76884ae5f88c"
+  },
+  "nodeGroups": [],
+  "id": "842c5e5f969744",
+  "tags": []
+}

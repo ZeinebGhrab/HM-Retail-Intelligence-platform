@@ -1,60 +1,6 @@
 {
-  "name": "HM Streaming Pipeline",
+  "name": "HM - Recalcul RFM nocturne + notifications",
   "nodes": [
-    {
-      "parameters": {
-        "rule": {
-          "interval": [
-            {
-              "field": "cronExpression",
-              "expression": "0 6 * * *"
-            }
-          ]
-        }
-      },
-      "id": "075915c7-10d9-496e-b5bd-e650a010c439",
-      "name": "Déclencheur - Simulation quotidienne",
-      "type": "n8n-nodes-base.scheduleTrigger",
-      "typeVersion": 1.2,
-      "position": [
-        0,
-        0
-      ]
-    },
-    {
-      "parameters": {
-        "method": "POST",
-        "url": "=http://kafka-producer-api:8090/produce?date={{ $json.date }}",
-        "options": {
-          "timeout": 7200000
-        }
-      },
-      "id": "84ff65db-b0fb-4656-9c42-a8b63bd9659f",
-      "name": "Déclencher le producer Kafka",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [
-        672,
-        0
-      ]
-    },
-    {
-      "parameters": {
-        "method": "POST",
-        "url": "http://spark-job-trigger:8091/jobs/merge-stream",
-        "options": {
-          "timeout": 900000
-        }
-      },
-      "id": "7395a2c0-f54f-4b86-89d4-ef2646b6a570",
-      "name": "Lancer merge_stream_to_warehouse.py",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [
-        224,
-        416
-      ]
-    },
     {
       "parameters": {
         "rule": {
@@ -72,6 +18,23 @@
       "typeVersion": 1.2,
       "position": [
         0,
+        416
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://spark-job-trigger:8091/jobs/merge-stream",
+        "options": {
+          "timeout": 900000
+        }
+      },
+      "id": "7395a2c0-f54f-4b86-89d4-ef2646b6a570",
+      "name": "Lancer merge_stream_to_warehouse.py",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        224,
         416
       ]
     },
@@ -109,7 +72,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "http://ml-model-api:8000/predict/batch",
+        "url": "http://ml-serving:8500/predict/batch",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
@@ -127,19 +90,19 @@
         }
       },
       "id": "deefbfeb-797a-4381-9d20-092aeaf889e4",
-      "name": "Appeler l'API modèle (prédiction) — à activer",
+      "name": "Appeler l'API modèle (prédiction batch)",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
         896,
         416
       ],
-      "disabled": true,
-      "notes": "Désactivé volontairement : le modèle ML n'est pas encore construit (hors périmètre Data Engineering). Activer ce nœud une fois l'API modèle disponible."
+      "disabled": false,
+      "notes": "Appelle POST /predict/batch (ml/serving/app.py), qui scoring les 3 modèles (classification, clustering, regression) sur customers_features_train et retourne un résumé agrégé (BatchPredictionSummary). Nécessite que ml-serving ait un modèle 'champion' enregistré ou un repli local dans ml/models/."
     },
     {
       "parameters": {
-        "jsCode": "const data = $input.first().json;\n\nconst prompt = `Tu es l assistant analytique de ShopAnalytics pour Anavid Store 360. Voici les predictions de frequentation pour aujourd hui (${data.date_prevision}) : Visiteurs prevus : ${data.visiteurs_prevus}. Profil dominant : ${data.profil_dominant}. Niveau d affluence : ${data.niveau_affluence}. Heure de pointe : ${data.heure_pointe_debut} a ${data.heure_pointe_fin}. Redige un message professionnel et concis de 4 a 5 phrases en francais a destination de l equipe du magasin. Mentionne le nombre de visiteurs, le profil dominant, le niveau d affluence et donne 1 a 2 recommandations concretes sur la gestion du personnel ou des caisses.`;\n\nreturn [{\n  json: {\n    prompt: prompt,\n    prediction: data\n  }\n}];"
+        "jsCode": "const pred = $input.first().json;\n\nconst statusEntries = Object.entries(pred.club_status_distribution || {})\n  .map(([k, v]) => `${k}: ${v}`)\n  .join(', ');\n\nconst prompt = `Tu es l assistant analytique de la plateforme H&M Retail Intelligence. Voici un resume du scoring client genere le ${pred.generated_at} sur ${pred.n_customers_scored} clients (table ${pred.source_table}) : statut club dominant : ${pred.dominant_club_status} (repartition : ${statusEntries}). Segment dominant (clustering) : ${pred.dominant_segment}. Depense totale predite : ${pred.predicted_spend_total} (moyenne par client : ${pred.predicted_spend_mean}, mediane : ${pred.predicted_spend_median}). Redige un message professionnel et concis de 4 a 5 phrases en francais a destination de l equipe marketing/CRM. Mentionne le statut club dominant, le segment dominant et la depense predite, puis donne 1 a 2 recommandations concretes (ex. ciblage d une campagne, relance d un segment a risque).`;\n\nreturn [{\n  json: {\n    prompt: prompt,\n    prediction: pred\n  }\n}];"
       },
       "id": "f2ad0012-c906-4cee-a461-700f5f923304",
       "name": "Préparer Prompt Ollama",
@@ -147,20 +110,6 @@
       "typeVersion": 2,
       "position": [
         1120,
-        416
-      ]
-    },
-    {
-      "parameters": {
-        "promptType": "define",
-        "text": "={{ $('Préparer Prompt Ollama').item.json.prompt }}"
-      },
-      "id": "e134191b-0e9b-4c40-98b4-3e67d3da5354",
-      "name": "Basic LLM Chain",
-      "type": "@n8n/n8n-nodes-langchain.chainLlm",
-      "typeVersion": 1.4,
-      "position": [
-        1344,
         416
       ]
     },
@@ -184,7 +133,21 @@
     },
     {
       "parameters": {
-        "jsCode": "// Formate le payload attendu par Django SSE (receive_daily_report)\n// et par le Dashboard.tsx (PredictionData interface)\nconst llmText = $input.first().json.text?.trim();\nconst pred = $('Préparer Prompt Ollama').first().json.prediction;\n\nconst payload = {\n  type: 'llm_report',\n  date: pred.date_prevision,\n  generated_at: new Date().toISOString(),\n  message: llmText,\n  prediction: {\n    visiteurs_prevus: pred.visiteurs_prevus,\n    profil_dominant:  pred.profil_dominant,\n    niveau_affluence: pred.niveau_affluence,\n    heure_pointe:     `${pred.heure_pointe_debut} - ${pred.heure_pointe_fin}`\n  }\n};\n\nreturn [{ json: payload }];"
+        "promptType": "define",
+        "text": "={{ $('Préparer Prompt Ollama').item.json.prompt }}"
+      },
+      "id": "e134191b-0e9b-4c40-98b4-3e67d3da5354",
+      "name": "Basic LLM Chain",
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.4,
+      "position": [
+        1344,
+        416
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Formate le payload attendu par Django SSE (receive_daily_report) et par le\n// Dashboard.tsx (PredictionData interface) -- ce backend Django n'existe pas\n// dans ce depot (voir README.md section 2 'Ce qui n'est pas implemente') ; ce\n// noeud reste donc utile localement (payload pret a inspecter) mais l'appel\n// HTTP suivant ('Push SSE -> Django') echouera tant qu'aucun backend Django\n// n'est deploye a l'URL configuree.\nconst llmText = $input.first().json.text?.trim();\nconst pred = $('Préparer Prompt Ollama').first().json.prediction;\n\nconst payload = {\n  type: 'llm_report',\n  date: pred.generated_at,\n  generated_at: new Date().toISOString(),\n  message: llmText,\n  prediction: {\n    n_customers_scored: pred.n_customers_scored,\n    dominant_club_status: pred.dominant_club_status,\n    dominant_segment: pred.dominant_segment,\n    predicted_spend_total: pred.predicted_spend_total,\n    predicted_spend_mean: pred.predicted_spend_mean\n  }\n};\n\nreturn [{ json: payload }];"
       },
       "id": "bb3b3dd5-4568-4d99-9705-76052f018aa3",
       "name": "Formater Payload SSE",
@@ -194,37 +157,7 @@
         1696,
         416
       ],
-      "notes": "Formate exactement le PredictionData attendu par Dashboard.tsx et Django SSE"
-    },
-    {
-      "parameters": {
-        "method": "POST",
-        "url": "http://shopanalytics-django-api:8000/api/daily-report/",
-        "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
-            {
-              "name": "Content-Type",
-              "value": "application/json"
-            }
-          ]
-        },
-        "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify($json) }}",
-        "options": {
-          "timeout": 10000
-        }
-      },
-      "id": "2b2e4937-3fe4-4bee-b495-3d22124253ce",
-      "name": "Push SSE → Django",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [
-        1920,
-        224
-      ],
-      "notes": "POST /api/daily-report/ → Django notifie tous les clients SSE connectés (Dashboard + ChatIA)"
+      "notes": "Formate un résumé texte + agrégats issus de /predict/batch (voir 'Préparer Prompt Ollama')."
     },
     {
       "parameters": {
@@ -277,47 +210,36 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "=http://generator_api:8089/generate?date={{$json.date}}&rows=5",
+        "url": "http://shopanalytics-django-api:8000/api/daily-report/",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json) }}",
         "options": {
-          "timeout": 120000
+          "timeout": 10000
         }
       },
-      "id": "f7bb8887-872e-44a1-a634-7619bd8d4997",
-      "name": "Générer les transactions du jour",
+      "id": "2b2e4937-3fe4-4bee-b495-3d22124253ce",
+      "name": "Push SSE → Django",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        448,
-        0
-      ]
-    },
-    {
-      "parameters": {
-        "jsCode": "const today = new Date();\ntoday.setHours(0, 0, 0, 0); // normaliser à minuit\n\nreturn [{ json: { date: today.toISOString().split('T')[0] } }];"
-      },
-      "id": "78d155a0-abed-432e-b91a-477248688ce3",
-      "name": "Calculer la date simulée1",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        224,
-        0
-      ]
+        1920,
+        224
+      ],
+      "notes": "POST /api/daily-report/ → Django notifie tous les clients SSE connectés (Dashboard + ChatIA)"
     }
   ],
   "pinData": {},
   "connections": {
-    "Déclencheur - Simulation quotidienne": {
-      "main": [
-        [
-          {
-            "node": "Calculer la date simulée1",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
     "Lancer merge_stream_to_warehouse.py": {
       "main": [
         [
@@ -355,18 +277,7 @@
       "main": [
         [
           {
-            "node": "Appeler l'API modèle (prédiction) — à activer",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Appeler l'API modèle (prédiction) — à activer": {
-      "main": [
-        [
-          {
-            "node": "Préparer Prompt Ollama",
+            "node": "Appeler l'API modèle (prédiction batch)",
             "type": "main",
             "index": 0
           }
@@ -427,22 +338,11 @@
         ]
       ]
     },
-    "Générer les transactions du jour": {
+    "Appeler l'API modèle (prédiction batch)": {
       "main": [
         [
           {
-            "node": "Déclencher le producer Kafka",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Calculer la date simulée1": {
-      "main": [
-        [
-          {
-            "node": "Générer les transactions du jour",
+            "node": "Préparer Prompt Ollama",
             "type": "main",
             "index": 0
           }
@@ -456,11 +356,11 @@
     "binaryMode": "separate",
     "availableInMCP": false
   },
-  "versionId": "c72668b7-0a47-41a5-84d5-15fc3c71b773",
+  "versionId": "4d10b04a-f31f-40e7-b1ab-9855c4f25d51",
   "meta": {
     "instanceId": "f15849fb7803decc780e9ebdd4c4d1f48ec9ba90690a703e071c76884ae5f88c"
   },
   "nodeGroups": [],
-  "id": "xVBjcc1cRcgwma6p",
+  "id": "348d2599859545",
   "tags": []
 }

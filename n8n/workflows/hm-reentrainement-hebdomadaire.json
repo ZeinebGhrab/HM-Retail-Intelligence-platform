@@ -1,0 +1,166 @@
+{
+  "name": "HM - Réentraînement hebdomadaire",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 6 * * 1"
+            }
+          ]
+        }
+      },
+      "id": "2ad3f0f5-ce9a-49b8-9d38-322305ab4eaf",
+      "name": "Déclencheur - Ré-entraînement hebdomadaire (lundi 06:00)",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        800
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://ml-training-trigger:8600/train/all?register=true&promote=true",
+        "options": {
+          "timeout": 1800000
+        }
+      },
+      "id": "1f0d63ae-825a-4438-a21c-f1c8350f6d8f",
+      "name": "Lancer le ré-entraînement des 3 modèles",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        224,
+        800
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = $input.item.json;\nconst results = data.results || {};\nconst lines = [];\nlet anyPromoted = false;\n\nfor (const [task, res] of Object.entries(results)) {\n  if (res.error) {\n    lines.push(`❌ ${task} : échec (${JSON.stringify(res.error)})`);\n    continue;\n  }\n  const gate = res.quality_gate;\n  const gateStr = gate ? `${gate.metric}=${gate.value?.toFixed?.(4) ?? gate.value} (min ${gate.min})` : 'n/a';\n  if (gate && !gate.passed) {\n    lines.push(`⛔ ${task} : SOUS le seuil de qualité (${gateStr}) — promotion bloquée`);\n    continue;\n  }\n  if (res.promoted) {\n    anyPromoted = true;\n    lines.push(`✅ ${task} : nouveau champion (version ${res.champion_version}, ${gateStr})`);\n  } else {\n    lines.push(`↔️ ${task} : entraîné mais champion inchangé (${gateStr}, champion actuel=${res.current_champion_metric})`);\n  }\n}\n\nreturn [{\n  json: {\n    date: new Date().toISOString().split('T')[0],\n    any_promoted: anyPromoted,\n    summary: lines.join('\\n'),\n    results,\n  }\n}];"
+      },
+      "id": "f44c961f-9a22-4d9b-9101-dfbf08532c7f",
+      "name": "Analyser les résultats d'entraînement",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        448,
+        800
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://ml-serving:8500/admin/reload-models",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "id": "afe46d3e-8130-49b3-815c-48d018e270f6",
+      "name": "Recharger les modèles (ml-serving)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        672,
+        800
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://shopanalytics-django-api:8000/api/send-fcm/",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "=json",
+        "bodyParameters": {
+          "parameters": [
+            {}
+          ]
+        },
+        "jsonBody": "={{\n{\n  title: \"🧠 Ré-entraînement hebdomadaire - \" + $json.date,\n  body: $json.any_promoted ? \"Un ou plusieurs modèles ont été mis à jour.\" : \"Modèles ré-entraînés, aucun changement de champion.\",\n  data: {\n    type: \"model_retrain\",\n    date: $json.date,\n    any_promoted: $json.any_promoted,\n    summary: $json.summary\n  }\n}\n}}",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "id": "a0e7a803-eb6a-48d3-8a84-18d8d6c836eb",
+      "name": "Notifier FCM - ré-entraînement terminé",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        896,
+        800
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Déclencheur - Ré-entraînement hebdomadaire (lundi 06:00)": {
+      "main": [
+        [
+          {
+            "node": "Lancer le ré-entraînement des 3 modèles",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Lancer le ré-entraînement des 3 modèles": {
+      "main": [
+        [
+          {
+            "node": "Analyser les résultats d'entraînement",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Analyser les résultats d'entraînement": {
+      "main": [
+        [
+          {
+            "node": "Recharger les modèles (ml-serving)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Recharger les modèles (ml-serving)": {
+      "main": [
+        [
+          {
+            "node": "Notifier FCM - ré-entraînement terminé",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "52e86716-919e-4190-836d-c2db6e2dc2bf",
+  "meta": {
+    "instanceId": "f15849fb7803decc780e9ebdd4c4d1f48ec9ba90690a703e071c76884ae5f88c"
+  },
+  "nodeGroups": [],
+  "id": "ff9c6479995a48",
+  "tags": []
+}
