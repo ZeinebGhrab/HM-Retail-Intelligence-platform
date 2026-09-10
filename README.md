@@ -32,7 +32,7 @@ Big Data pipeline, MLOps, real-time streaming, and orchestration.**
 ---
 
 > This README describes **only what is actually implemented and functional today**, with a clear
-> explanation of how each piece works. Unimplemented pieces are listed separately in [§8](#8-whats-not-implemented-yet),
+> explanation of how each piece works. Unimplemented pieces are listed separately in [§9](#9-whats-not-implemented-yet),
 > without ever being presented as operational.
 
 ## 📑 Table of contents
@@ -45,11 +45,12 @@ Big Data pipeline, MLOps, real-time streaming, and orchestration.**
 - [4. MLOps — training, tracking & serving — `ml/`](#4-mlops--training-tracking--serving--ml)
 - [5. Real-time streaming & orchestration — `kafka/` + `n8n/`](#5-real-time-streaming--orchestration--kafka--n8n)
 - [6. Dashboards — `grafana/`](#6-dashboards--grafana)
-- [7. Docker infrastructure](#7-docker-infrastructure)
-- [8. What's not implemented yet](#8-whats-not-implemented-yet)
-- [9. Quick start](#9-quick-start)
-- [10. Repository layout](#10-repository-layout)
-- [11. Further documentation](#11-further-documentation)
+- [7. RAG Chatbot — `backend/app/` + `frontend/`](#7-rag-chatbot--backendapp--frontend)
+- [8. Docker infrastructure](#8-docker-infrastructure)
+- [9. What's not implemented yet](#9-whats-not-implemented-yet)
+- [10. Quick start](#10-quick-start)
+- [11. Repository layout](#11-repository-layout)
+- [12. Further documentation](#12-further-documentation)
 
 ---
 
@@ -67,6 +68,7 @@ Big Data pipeline, MLOps, real-time streaming, and orchestration.**
 | 📈 Drift monitoring | `ml/monitoring/` (Evidently AI) |
 | 🕹️ Scheduling & orchestration of the whole cycle | `n8n/workflows/` |
 | 📊 Business & ML dashboards | `grafana/` |
+| 💬 Client-specific RAG chatbot (Ollama, tool-calling) + web UI | `backend/app/` + `frontend/` |
 | ✅ CI/CD (lint, tests, image build, scheduled retraining) | `.github/workflows/mlops-ci.yml` |
 
 ### 1.2 End-to-end data flow
@@ -94,6 +96,7 @@ In parallel, independently of this batch flow:
 notebooks/01→07 — full EDA + ML pipeline on a CSV snapshot of the same data
 kafka/ + spark/streaming_pipeline/ — near real-time transaction ingestion, merged nightly
 n8n/workflows/ — schedules simulation, RFM recomputation, and weekly retraining
+backend/app/ + frontend/ — RAG chatbot (Ollama) over PostgreSQL + ml-serving, web UI with Grafana
 ```
 
 This diagram is deliberately shorter than what one might imagine for a full "retail intelligence"
@@ -236,10 +239,38 @@ docker compose up -d grafana
 
 ---
 
-## 7. Docker infrastructure
+## 7. RAG Chatbot — `backend/app/` + `frontend/`
+
+**What it is**: a chatbot that answers questions about a specific H&M customer (profile, purchase
+history, behavioral segment) or general platform questions, using a local Ollama LLM with
+tool-calling — plus a web frontend combining the Grafana dashboards (§6) with a resizable chat
+panel.
+
+**Model**: chosen via [`backend/benchmark/`](./backend/benchmark/README.md), which scores several
+Ollama models on tool-calling accuracy and resistance to hallucination. Winner:
+`qwen2.5:3b-instruct-q4_K_M`.
+
+**How it works**: two Ollama calls per question (`backend/app/rag_pipeline.py`) — first the LLM
+picks a tool from a fixed list (customer profile, purchase history, behavioral-cluster prediction,
+hypothetical spend/status prediction, or semantic search over a small knowledge base), the backend
+runs that tool in Python (Postgres first, CSV fallback), then a second Ollama call turns the tool's
+result into a natural-language answer. If a tool has nothing to return, it signals that explicitly
+(`backend/app/tool_signals.py`) instead of leaving the LLM to guess.
+
+```bash
+docker compose up -d ollama chatbot-app     # → http://localhost:8601 (see CHATBOT_APP_PORT in .env)
+cd frontend && npm install && npm run dev   # → http://localhost:5173
+```
+
+📖 **Full detail**: [`backend/app/README.md`](./backend/app/README.md) (all tools, data sources,
+API contract) and [`frontend/README.md`](./frontend/README.md) (dashboard + chat panel UI).
+
+---
+
+## 8. Docker infrastructure
 
 **What it is**: the orchestration of all containers needed for the implemented parts above (plus a
-few infrastructure pieces that are ready but not yet wired to application code, see §8).
+few infrastructure pieces that are ready but not yet wired to application code, see §9).
 
 **Services supporting an implemented, functional part**:
 
@@ -253,6 +284,10 @@ few infrastructure pieces that are ready but not yet wired to application code, 
 | `grafana` | Business & ML dashboards (§6) |
 | `n8n` | Orchestrates the batch/streaming/retraining cycle (§5) |
 | `kafka` | Event broker for near real-time ingestion (§5) |
+| `ollama` | Local LLM used by the chatbot (§7) and by the nightly n8n summary node (§5) |
+| `chatbot-app` | Runs the FastAPI RAG chatbot from `backend/app/` (§7) |
+| `qdrant` | Started for experimentation only — production `semantic_search` (§7) uses in-memory cosine similarity, not Qdrant (see `backend/app/experiments/qdrant_poc.py`) |
+| `ml-training-trigger` | Retraining/promotion API (`ml/training/training_api.py`), triggered by the weekly n8n workflow (§5) |
 
 **Minimal startup for the implemented flow** (without the services not yet wired to code):
 ```bash
@@ -268,7 +303,7 @@ docker compose up -d postgres adminer spark-master spark-worker mlflow ml-servin
 
 ---
 
-## 8. What's not implemented yet
+## 9. What's not implemented yet
 
 These elements exist in the repo as folders/ready Docker images, but **contain no functional
 logic** — they are placeholders (`.gitkeep`), not operational features:
@@ -276,10 +311,7 @@ logic** — they are placeholders (`.gitkeep`), not operational features:
 | Folder / service | Actual state |
 |---|---|
 | `kafka/consumers/` | Empty folder (the real "consumer" is the Spark job `spark/streaming_pipeline/jobs/streaming_job.py`, see §5) — nothing to add here unless a standalone Kafka consumer is needed. |
-| `backend/app/` | Empty folder. No application API exists between a frontend and the data/models. |
-| `frontend/src/` | Empty folder. No user interface (dashboard) exists. |
-| RAG chatbot (`ollama` + `qdrant`) | The Docker services start. `ollama` is actually called by the `hm-rfm-nocturne-notifications` n8n workflow (text summary generation), but `qdrant` receives no data: no ingestion, no collection created, no vector search wired to a frontend. |
-| n8n nodes `Push SSE → Django`, `Envoyer au Chatbot`, `Envoyer FCM` | Present in `hm-rfm-nocturne-notifications.json`, but point to a Django backend, a chatbot, and an FCM service that don't exist in this repo. |
+| n8n nodes `Push SSE → Django`, `Envoyer au Chatbot`, `Envoyer FCM` | Present in `hm-rfm-nocturne-notifications.json`, but still point to the old Django backend and Ionic chatbot (not `backend/app/` + `frontend/`, see §7) and an FCM service, none of which exist in this repo. |
 | `.env.example` | Missing from the repo, even though `docker-compose.yml` and this README rely on it (`cp .env.example .env`). Needs to be created before the first startup. |
 | `data/processed/`, `data/features/` | Folders inherited from an earlier pipeline version, not fed by the current code. |
 | DVC/DagsHub remote | `.dvc/config` contains a URL template, not yet pointed to a real DagsHub repo. |
@@ -290,7 +322,7 @@ one of these pieces.
 
 ---
 
-## 9. Quick start
+## 10. Quick start
 
 ```bash
 # 0. Configuration
@@ -317,6 +349,10 @@ python ml/monitoring/drift_report.py
 
 # 6. (optional) Dashboards
 docker compose up -d grafana                        # http://localhost:3001
+
+# 7. (optional) RAG chatbot + web UI
+docker compose up -d ollama chatbot-app             # http://localhost:8601
+cd frontend && npm install && npm run dev           # http://localhost:5173
 ```
 
 📖 Full detail of every command: [`ml/MLOPS_GUIDE.md`](./ml/MLOPS_GUIDE.md) §9.
@@ -327,7 +363,7 @@ scores) — no execution needed to view them.
 
 ---
 
-## 10. Repository layout
+## 11. Repository layout
 
 ```
 hm-retail-intelligence-platform/
@@ -343,19 +379,20 @@ hm-retail-intelligence-platform/
 ├── spark/                         # ✅ implemented — batch pipeline → PostgreSQL (§3)
 │                                   #    + streaming pipeline (§5)
 ├── ml/                             # ✅ implemented — training, MLflow, API, monitoring (§4)
-├── kafka/                          # ✅ implemented — producer + API (§5); consumers/ empty (§8)
+├── kafka/                          # ✅ implemented — producer + API (§5); consumers/ empty (§9)
 ├── n8n/workflows/                  # ✅ implemented — 3 separate workflows (§5)
 │   ├── hm-simulation-quotidienne-kafka.json
 │   ├── hm-rfm-nocturne-notifications.json
 │   └── hm-reentrainement-hebdomadaire.json
 ├── grafana/                        # ✅ implemented — 5 dashboards, 25 panels (§6)
-├── backend/app/                    # 📂 reserved — empty
-└── frontend/src/                   # 📂 reserved — empty
+├── backend/app/                    # ✅ implemented — RAG chatbot API (§7)
+├── backend/benchmark/               # ✅ implemented — LLM benchmark used to pick the chatbot model (§7)
+└── frontend/                        # ✅ implemented — dashboard + chat panel web UI (§7)
 ```
 
 ---
 
-## 11. Further documentation
+## 12. Further documentation
 
 | Document | Content |
 |---|---|
@@ -368,5 +405,8 @@ hm-retail-intelligence-platform/
 | [`grafana/README.md`](./grafana/README.md) | Grafana setup, provisioning, troubleshooting |
 | [`grafana/README_GRAFANA.md`](./grafana/README_GRAFANA.md) | All 25 dashboard panels with their SQL queries |
 | [`kafka/README.md`](./kafka/README.md) | Kafka producer & API detail |
+| [`backend/app/README.md`](./backend/app/README.md) | RAG chatbot: tools, data sources, API contract |
+| [`backend/benchmark/README.md`](./backend/benchmark/README.md) | LLM benchmark methodology and results (model selection for the chatbot) |
+| [`frontend/README.md`](./frontend/README.md) | Dashboard + chat panel web UI |
 | [`notebooks/README.md`](./notebooks/README.md) | Notebook execution order, usage |
 | [`notebooks/DETAILS.md`](./notebooks/DETAILS.md) | Detailed statistical methodology, formulas, full results |
