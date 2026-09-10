@@ -1,0 +1,141 @@
+{
+  "model_id": "llama3.2:1b-instruct-q4_K_M",
+  "label": "Llama 3.2 1B (q4_K_M)",
+  "timestamp": "2026-08-28T05:58:53.534449",
+  "hardware": {
+    "type": "cpu",
+    "source": "ollama_api",
+    "model": "llama3.2:1b-instruct-q4_K_M",
+    "size_gb": 0.82,
+    "size_vram_gb": 0.0,
+    "vram_ratio_pct": 0.0
+  },
+  "ttft_throughput": {
+    "ttft_avg": 0.329,
+    "ttft_min": 0.329,
+    "throughput_avg": 22.9,
+    "throughput_max": 23.5
+  },
+  "tool_calling": {
+    "total_queries": 43,
+    "valid_json": 35,
+    "valid_json_pct": 81.4,
+    "valid_tool_structure": 34,
+    "valid_tool_pct": 79.1,
+    "correct_tool": 25,
+    "scorable_tool_queries": 40,
+    "correct_tool_pct": 62.5,
+    "trap_responses": [
+      {
+        "id": 42,
+        "tool_chosen": "get_customer_profile"
+      },
+      {
+        "id": 43,
+        "tool_chosen": "calculate"
+      }
+    ],
+    "errors": [
+      {
+        "id": 5,
+        "reason": "invalid_json",
+        "raw": "{\n \"tool\": \"get_customer_status\",\n \"parameters\": {\"customer_id\": \"6d78cd0b0eb31e75f5c00b7458c7a5f4f4"
+      },
+      {
+        "id": 6,
+        "reason": "invalid_json",
+        "raw": "{\n \"tool\": \"get_customer_purchase_history\",\n \"parameters\": {\n  \"customer_id\": \"6d78cd0b0eb31e75f5c00"
+      },
+      {
+        "id": 11,
+        "reason": "wrong_tool",
+        "expected": "get_customer_top_categories",
+        "got": "predict_customer_cluster"
+      },
+      {
+        "id": 18,
+        "reason": "wrong_tool",
+        "expected": "predict_customer_cluster",
+        "got": "cluster"
+      },
+      {
+        "id": 22,
+        "reason": "wrong_tool",
+        "expected": "compare_customer_to_segment",
+        "got": "predict_customer_cluster"
+      },
+      {
+        "id": 24,
+        "reason": "invalid_json",
+        "raw": "{\n  \"tool\": get_customer_top_categories,\n  \"parameters\": {\n    \"customer_id\": \"tu\"\n  }\n}\n\nRéponse :\n"
+      },
+      {
+        "id": 25,
+        "reason": "wrong_tool",
+        "expected": "semantic_search",
+        "got": "predict_customer_status"
+      },
+      {
+        "id": 26,
+        "reason": "invalid_json",
+        "raw": "Pour un client à fort potentiel mais peu actif, voici quelques actions marketing que je recommandera"
+      },
+      {
+        "id": 27,
+        "reason": "wrong_tool",
+        "expected": "semantic_search",
+        "got": "predict_customer_spend"
+      },
+      {
+        "id": 28,
+        "reason": "invalid_json",
+        "raw": "ملف العميل هو \"client.json\"."
+      }
+    ]
+  },
+  "anti_hallucination": {
+    "n_runs": 2,
+    "pass_count": 2,
+    "pass_rate_pct": 100.0,
+    "hallucination_free": true,
+    "runs": [
+      {
+        "response": "Je suis désolé, mais je ne peux pas vous confirmer les chiffres suivants :\n\n- Plus de 5 millions de clients au total : **Non**, selon les données fournies dans l'insights_summary.md, le nombre total de clients est de 1 371 980.\n- Le segment VIP représente que 10% du chiffre d'affaires : **Non**, sel",
+        "mentions_correct_clients": true,
+        "mentions_correct_vip_share": true,
+        "invented_wrong_clients": false,
+        "invented_wrong_vip_share": false,
+        "hallucination_free": true
+      },
+      {
+        "response": "Je suis désolé, mais je ne peux pas vous confirmer les chiffres suivants :\n\n- Plus de 5 millions de clients au total : **Non**, selon le contexte fournies, il y a effectivement plus de 1 371 980 de clients au total.\n- Le segment VIP représente que 10% du chiffre d'affaires : **Non**, selon le contex",
+        "mentions_correct_clients": true,
+        "mentions_correct_vip_share": true,
+        "invented_wrong_clients": false,
+        "invented_wrong_vip_share": false,
+        "hallucination_free": true
+      }
+    ]
+  },
+  "context_latency": {
+    "throughput_short_ctx": 19.5,
+    "throughput_long_ctx": 19.8,
+    "degradation_pct": -1.5
+  },
+  "scoring": {
+    "score_100": 87,
+    "score_breakdown": {
+      "ttft": 20,
+      "throughput": 20,
+      "json_validity": 16,
+      "correct_tool_selection": 16,
+      "anti_hallucination": 15
+    },
+    "ttft_pass": true,
+    "throughput_pass": true,
+    "json_pass": false,
+    "hallucination_free": true,
+    "correct_tool_pct": 62.5,
+    "recommended": false
+  }
+}

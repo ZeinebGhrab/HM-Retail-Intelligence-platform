@@ -1,0 +1,8 @@
+# Exports notebook 04 (§15) — trop volumineux pour git (customers_features.csv
+# seul fait ~317 Mo), même convention que data/raw/ et notebooks/intermediate/
+# (voir notebooks/README.md) : générés/copiés localement, jamais versionnés.
+# company_info.md est rédigé à la main, pas un export — reste suivi par git.
+*.csv
+insights_summary.md
+!company_info.md
+!.gitignore

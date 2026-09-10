@@ -1,0 +1,43 @@
+.dashboard-view {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  width: 100%;
+  background: #f3f4f6;
+}
+
+.dashboard-toolbar {
+  display: flex;
+  gap: 4px;
+  padding: 10px 16px;
+  background: #ffffff;
+  border-bottom: 1px solid #e2e5e9;
+  overflow-x: auto;
+}
+
+.dashboard-tab {
+  padding: 7px 14px;
+  border: none;
+  border-radius: 7px;
+  background: transparent;
+  color: #4b5563;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.dashboard-tab:hover {
+  background: #f3f4f6;
+}
+
+.dashboard-tab.active {
+  background: #2563eb;
+  color: #ffffff;
+}
+
+.dashboard-iframe {
+  flex: 1;
+  width: 100%;
+  border: none;
+}
