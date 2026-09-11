@@ -1,0 +1,20 @@
+# docker-compose.gpu.yml — surcouche optionnelle, pas un fichier autonome.
+#
+# N'a aucun effet tant qu'il n'est pas explicitement fusionné au fichier de
+# base — docker-compose.yml reste 100% CPU-safe pour tout le monde par
+# défaut. Nécessite une machine avec GPU NVIDIA + nvidia-container-toolkit
+# installé (sinon Docker refuse de démarrer "ollama" plutôt que de replier
+# sur le CPU — voir le commentaire équivalent dans docker-compose.yml).
+#
+# Utilisation :
+#   docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d
+#
+services:
+  ollama:
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]

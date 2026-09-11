@@ -30,8 +30,22 @@ echo ===============================
 echo SHOP ANALYTICS DATA PLATFORM
 echo ===============================
 
+REM GPU si dispo (nvidia-smi present ET fonctionnel), CPU sinon -- voir
+REM docker-compose.gpu.yml pour ce qui est ajoute et pourquoi.
+SET GPU_FLAGS=
 
-docker compose up -d
+where nvidia-smi >nul 2>&1
+IF %ERRORLEVEL%==0 (
+    nvidia-smi >nul 2>&1
+    IF %ERRORLEVEL%==0 SET GPU_FLAGS=-f docker-compose.yml -f docker-compose.gpu.yml
+)
+
+IF DEFINED GPU_FLAGS (
+    echo GPU NVIDIA detecte -- activation de l'acceleration GPU pour Ollama.
+    docker compose %GPU_FLAGS% up -d
+) ELSE (
+    docker compose up -d
+)
 
 
 GOTO END

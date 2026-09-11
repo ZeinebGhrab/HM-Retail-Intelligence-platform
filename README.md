@@ -248,9 +248,36 @@ panel.
 
 **Model**: chosen via [`backend/benchmark/`](./backend/benchmark/README.md), which scores several
 Ollama models on tool-calling accuracy and resistance to hallucination. Winner:
-`qwen2.5:3b-instruct-q4_K_M`. Both this model and `nomic-embed-text` (used for semantic search) are
-pulled automatically by the `ollama-init` service on `docker compose up` — no manual `ollama pull`
-step needed.
+`qwen2.5:3b-instruct-q4_K_M`.
+
+**Model download**: both this model and `nomic-embed-text` (used for semantic search) are pulled
+automatically by the `ollama-init` service — it waits for `ollama` to be healthy, pulls both models,
+then exits. `ollama pull` is idempotent (it just confirms and exits fast if already present), so this
+runs safely on every `docker compose up`, not just the first one.
+
+⚠️ **On a first run (empty `ollama_data` volume), wait for `ollama-init` to finish before using the
+chatbot** — until then, `ollama` has no model loaded and every chat request will fail. Check progress
+with:
+```bash
+docker compose logs -f ollama-init
+```
+Done once it prints `Ollama models ready` and exits (`docker compose ps ollama-init` shows
+`Exited (0)`) — the first run can take a few minutes (≈2 GB + ≈300 MB to download), subsequent runs
+finish in seconds.
+
+**GPU (optional)**: `ollama` runs on CPU by default (works on any machine) — the GPU override only
+accelerates `ollama` itself, `ml-serving`/`ml-training-trigger` stay CPU-only regardless. If the
+machine has an NVIDIA GPU, `./run.sh all` / `run.bat all` detect it automatically and enable it —
+nothing to configure. On Windows with Docker Desktop (WSL2 backend), a normal NVIDIA driver is
+enough, no extra install needed. **On Linux**, install
+[`nvidia-container-toolkit`](https://github.com/NVIDIA/nvidia-container-toolkit) first. Starting
+services manually instead of via `run.sh`/`run.bat` doesn't auto-detect; add the GPU override
+explicitly:
+```bash
+docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d ollama chatbot-app
+```
+Without the toolkit installed, adding this override makes Docker refuse to start `ollama` at all
+(no automatic fallback to CPU) — see [`docker-compose.gpu.yml`](./docker-compose.gpu.yml) for detail.
 
 **How it works**: two Ollama calls per question (`backend/app/rag_pipeline.py`) — first the LLM
 picks a tool from a fixed list (customer profile, purchase history, behavioral-cluster prediction,
@@ -354,10 +381,13 @@ docker compose up -d grafana                        # http://localhost:3001
 
 # 7. (optional) RAG chatbot + web UI
 docker compose up -d ollama chatbot-app             # http://localhost:8601
+# First run only: wait for ollama-init to finish pulling both models before
+# asking the chatbot anything — see §7 for how to check its progress.
 cd frontend && npm install && npm run dev           # http://localhost:5173
 ```
 
-📖 Full detail of every command: [`ml/MLOPS_GUIDE.md`](./ml/MLOPS_GUIDE.md) §9.
+📖 Full detail of every command: [`ml/MLOPS_GUIDE.md`](./ml/MLOPS_GUIDE.md) §9. See §7 for the
+optional GPU setup.
 
 **View notebook results without running anything**: opening any `.ipynb` in
 [`notebooks/`](./notebooks/) directly shows its already computed results (charts, tables,

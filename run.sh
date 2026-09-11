@@ -9,7 +9,14 @@ case "$CMD" in
     echo "==============================="
     echo "SHOP ANALYTICS DATA PLATFORM"
     echo "==============================="
-    docker compose up -d
+    # GPU si dispo (nvidia-smi présent ET fonctionnel), CPU sinon — voir
+    # docker-compose.gpu.yml pour ce qui est ajouté et pourquoi.
+    if command -v nvidia-smi >/dev/null 2>&1 && nvidia-smi >/dev/null 2>&1; then
+      echo "GPU NVIDIA détecté — activation de l'accélération GPU pour Ollama."
+      docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d
+    else
+      docker compose up -d
+    fi
     ;;
   infra)
     docker compose up -d kafka zookeeper postgres adminer qdrant n8n mlflow
