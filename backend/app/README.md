@@ -87,7 +87,7 @@ contrat d'un ancien frontend Ionic consulté en amont (supprimé du dépôt depu
 
 ```bash
 pip install -r requirements.txt
-uvicorn main:app --reload --port 8600
+uvicorn main:app --reload --port 8601
 ```
 
 Variables d'environnement (voir `config.py`) : `OLLAMA_HOST`, `OLLAMA_MODEL`, `ML_SERVING_URL`,

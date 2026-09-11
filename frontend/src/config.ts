@@ -1,5 +1,5 @@
 // URL de base de l'API du chatbot (backend/app/, voir backend/app/main.py).
-export const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:8600";
+export const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:8601";
 
 // URL de base de Grafana (voir docker-compose.yml, service "grafana").
 export const GRAFANA_BASE_URL = import.meta.env.VITE_GRAFANA_URL || "http://localhost:3001";
