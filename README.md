@@ -248,7 +248,9 @@ panel.
 
 **Model**: chosen via [`backend/benchmark/`](./backend/benchmark/README.md), which scores several
 Ollama models on tool-calling accuracy and resistance to hallucination. Winner:
-`qwen2.5:3b-instruct-q4_K_M`.
+`qwen2.5:3b-instruct-q4_K_M`. Both this model and `nomic-embed-text` (used for semantic search) are
+pulled automatically by the `ollama-init` service on `docker compose up` — no manual `ollama pull`
+step needed.
 
 **How it works**: two Ollama calls per question (`backend/app/rag_pipeline.py`) — first the LLM
 picks a tool from a fixed list (customer profile, purchase history, behavioral-cluster prediction,
@@ -285,6 +287,7 @@ few infrastructure pieces that are ready but not yet wired to application code, 
 | `n8n` | Orchestrates the batch/streaming/retraining cycle (§5) |
 | `kafka` | Event broker for near real-time ingestion (§5) |
 | `ollama` | Local LLM used by the chatbot (§7) and by the nightly n8n summary node (§5) |
+| `ollama-init` | One-shot: pulls both models the chatbot needs (`qwen2.5:3b-instruct-q4_K_M`, `nomic-embed-text`) once `ollama` is healthy, then exits |
 | `chatbot-app` | Runs the FastAPI RAG chatbot from `backend/app/` (§7) |
 | `qdrant` | Started for experimentation only — production `semantic_search` (§7) uses in-memory cosine similarity, not Qdrant (see `backend/app/experiments/qdrant_poc.py`) |
 | `ml-training-trigger` | Retraining/promotion API (`ml/training/training_api.py`), triggered by the weekly n8n workflow (§5) |
