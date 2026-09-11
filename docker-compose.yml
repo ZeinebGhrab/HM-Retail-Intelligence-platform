@@ -530,6 +530,45 @@ services:
       - shop_data_net
 
   # ============================================================
+  # OLLAMA MODEL INITIALIZATION
+  # ============================================================
+  # Sans ça, un `ollama_data` fraîchement créé démarre vide : aucun mécanisme
+  # ailleurs dans le dépôt ne télécharge qwen2.5:3b-instruct-q4_K_M (modèle de
+  # chat, retenu par backend/benchmark/) ni nomic-embed-text (modèle
+  # d'embeddings, voir backend/app/tools/semantic.py) — le benchmark (profil
+  # "benchmark", non lancé par défaut) ne pull/conserve que des modèles de
+  # chat candidats, jamais nomic-embed-text. `ollama pull` est idempotent :
+  # relancé sans rien à télécharger, il confirme juste la présence du modèle
+  # et se termine aussitôt.
+
+  ollama-init:
+    image: ollama/ollama
+
+    container_name: shop-ollama-init
+
+    restart: "no"
+
+    depends_on:
+      ollama:
+        condition: service_healthy
+
+    environment:
+      OLLAMA_HOST: http://ollama:11434
+
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        set -e
+        echo "Pulling qwen2.5:3b-instruct-q4_K_M..."
+        ollama pull qwen2.5:3b-instruct-q4_K_M
+        echo "Pulling nomic-embed-text..."
+        ollama pull nomic-embed-text
+        echo "Ollama models ready"
+
+    networks:
+      - shop_data_net
+
+  # ============================================================
   # BENCHMARK LLM (sélection du modèle Ollama — voir backend/benchmark/)
   # ============================================================
   # Ne démarre PAS avec un simple `docker compose up` (profiles: benchmark).
