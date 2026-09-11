@@ -312,7 +312,6 @@ logic** — they are placeholders (`.gitkeep`), not operational features:
 |---|---|
 | `kafka/consumers/` | Empty folder (the real "consumer" is the Spark job `spark/streaming_pipeline/jobs/streaming_job.py`, see §5) — nothing to add here unless a standalone Kafka consumer is needed. |
 | n8n nodes `Push SSE → Django`, `Envoyer au Chatbot`, `Envoyer FCM` | Present in `hm-rfm-nocturne-notifications.json`, but still point to the old Django backend and Ionic chatbot (not `backend/app/` + `frontend/`, see §7) and an FCM service, none of which exist in this repo. |
-| `.env.example` | Missing from the repo, even though `docker-compose.yml` and this README rely on it (`cp .env.example .env`). Needs to be created before the first startup. |
 | `data/processed/`, `data/features/` | Folders inherited from an earlier pipeline version, not fed by the current code. |
 | DVC/DagsHub remote | `.dvc/config` contains a URL template, not yet pointed to a real DagsHub repo. |
 
