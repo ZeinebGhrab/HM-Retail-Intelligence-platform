@@ -13,7 +13,7 @@ export default function DashboardView() {
   // l'iframe). theme=light pour matcher le reste de l'app. Voir
   // docker-compose.yml (GF_SECURITY_ALLOW_EMBEDDING, GF_AUTH_ANONYMOUS_ENABLED)
   // pour que l'iframe se charge sans login.
-  const src = `${GRAFANA_BASE_URL}/d/${selected.uid}?orgId=1&kiosk&theme=light`;
+  const src = `${GRAFANA_BASE_URL}/d/${selected.uid}?orgId=1&kiosk&theme=light&hideLogo`;
 
   return (
     <div className="dashboard-view">

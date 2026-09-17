@@ -1,6 +1,7 @@
 import { useCallback, useRef, useState } from "react";
 import DashboardView from "./components/DashboardView";
 import ChatPanel from "./components/ChatPanel";
+import NotificationBell from "./components/NotificationBell";
 import "./App.css";
 
 const DEFAULT_CHAT_WIDTH = 440;
@@ -41,21 +42,29 @@ export default function App() {
     <div className="app-shell">
       <header className="app-header">
         <span className="app-title">H&amp;M Retail Intelligence</span>
-        <button
-          className={`chat-toggle-btn ${chatOpen ? "active" : ""}`}
-          onClick={() => setChatOpen((v) => !v)}
-          aria-label="Ouvrir l'assistant IA"
-          title="Assistant IA"
+
+        <div
+          className="app-header-actions"
+          style={{ display: "flex", alignItems: "center", gap: 8 }}
         >
-          <svg width="26" height="26" viewBox="0 0 24 24" fill="none">
-            <path
-              d="M4 5h16v11H8l-4 4V5z"
-              stroke="currentColor"
-              strokeWidth="1.8"
-              strokeLinejoin="round"
-            />
-          </svg>
-        </button>
+          <NotificationBell />
+
+          <button
+            className={`chat-toggle-btn ${chatOpen ? "active" : ""}`}
+            onClick={() => setChatOpen((v) => !v)}
+            aria-label="Ouvrir l'assistant IA"
+            title="Assistant IA"
+          >
+            <svg width="26" height="26" viewBox="0 0 24 24" fill="none">
+              <path
+                d="M4 5h16v11H8l-4 4V5z"
+                stroke="currentColor"
+                strokeWidth="1.8"
+                strokeLinejoin="round"
+              />
+            </svg>
+          </button>
+        </div>
       </header>
 
       <div className="app-body">

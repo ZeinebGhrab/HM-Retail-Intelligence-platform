@@ -3,41 +3,61 @@
   flex-direction: column;
   height: 100%;
   width: 100%;
-  background: #f3f4f6;
+  background: #f4f5f7;
 }
 
 .dashboard-toolbar {
-  display: flex;
+  display: inline-flex;
   gap: 4px;
-  padding: 10px 16px;
+  margin: 14px 18px;
+  padding: 5px;
   background: #ffffff;
-  border-bottom: 1px solid #e2e5e9;
+  border: 1px solid #eef0f2;
+  border-radius: 14px;
+  width: fit-content;
+  max-width: calc(100% - 36px);
   overflow-x: auto;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.05);
+}
+
+.dashboard-toolbar::-webkit-scrollbar {
+  height: 0;
 }
 
 .dashboard-tab {
-  padding: 7px 14px;
+  padding: 8px 18px;
   border: none;
-  border-radius: 7px;
+  border-radius: 10px;
   background: transparent;
-  color: #4b5563;
+  color: #6b7280;
   font-size: 13px;
-  font-weight: 500;
+  font-weight: 600;
   cursor: pointer;
   white-space: nowrap;
+  letter-spacing: -0.005em;
+  transition: background 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
 }
 
 .dashboard-tab:hover {
+  color: #111827;
   background: #f3f4f6;
 }
 
 .dashboard-tab.active {
-  background: #2563eb;
+  background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
   color: #ffffff;
+  box-shadow: 0 3px 10px rgba(37, 99, 235, 0.28);
+}
+
+.dashboard-tab.active:hover {
+  color: #ffffff;
+  background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
 }
 
 .dashboard-iframe {
   flex: 1;
   width: 100%;
   border: none;
+  border-radius: 12px 12px 0 0;
+  background: #ffffff;
 }

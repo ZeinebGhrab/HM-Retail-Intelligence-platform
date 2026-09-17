@@ -15,13 +15,13 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from rag_pipeline import answer_question
 from schemas import ChatRequest, ChatResponse
-
+from notifications_router import router as notifications_router
 app = FastAPI(
     title="H&M Retail Intelligence — Chatbot RAG",
     description="Assistant conversationnel client-spécifique (Ollama + tool calling).",
     version="1.0.0",
 )
-
+app.include_router(notifications_router)
 # frontend/ (localhost:5173 en dev) appelle cette API depuis le navigateur —
 # sans CORS, le fetch() échoue silencieusement ("fetch failed") dès le
 # preflight OPTIONS, jamais vu pendant les tests via curl/docker exec (qui

@@ -12,13 +12,13 @@
           ]
         }
       },
-      "id": "dac4b049-ab9d-43bc-90e8-0a847f783620",
+      "id": "02330ef5-b473-4838-8eba-0bc28b10a09d",
       "name": "Déclencheur - RFM nocturne (02:00)",
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1.2,
       "position": [
-        0,
-        416
+        -1952,
+        208
       ]
     },
     {
@@ -29,13 +29,13 @@
           "timeout": 900000
         }
       },
-      "id": "7395a2c0-f54f-4b86-89d4-ef2646b6a570",
+      "id": "95e7c5d4-af24-4f5b-9ba0-a0409d31781a",
       "name": "Lancer merge_stream_to_warehouse.py",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        224,
-        416
+        -1776,
+        208
       ]
     },
     {
@@ -46,26 +46,26 @@
           "timeout": 7200000
         }
       },
-      "id": "79a2177d-76e8-4849-bec1-4a60a53a920d",
+      "id": "4c65c363-cc2e-49ba-96bd-5c95fae7605d",
       "name": "Lancer pipeline_hm.py --source=warehouse",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        448,
-        416
+        -1568,
+        208
       ]
     },
     {
       "parameters": {
         "unit": "minutes"
       },
-      "id": "fa9e1c3a-bd77-41ff-b1de-1e545539e7bf",
+      "id": "95c8ad12-2411-41f7-a5a3-634b40e45a42",
       "name": "Attendre la fin du recalcul RFM",
       "type": "n8n-nodes-base.wait",
       "typeVersion": 1.1,
       "position": [
-        672,
-        416
+        -1376,
+        208
       ],
       "webhookId": "wait-rfm-completion"
     },
@@ -89,28 +89,27 @@
           "timeout": 300000
         }
       },
-      "id": "deefbfeb-797a-4381-9d20-092aeaf889e4",
+      "id": "78e26141-bdba-4632-b266-b5eb64e272c1",
       "name": "Appeler l'API modèle (prédiction batch)",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        896,
-        416
+        -1216,
+        208
       ],
-      "disabled": false,
       "notes": "Appelle POST /predict/batch (ml/serving/app.py), qui scoring les 3 modèles (classification, clustering, regression) sur customers_features_train et retourne un résumé agrégé (BatchPredictionSummary). Nécessite que ml-serving ait un modèle 'champion' enregistré ou un repli local dans ml/models/."
     },
     {
       "parameters": {
         "jsCode": "const pred = $input.first().json;\n\nconst statusEntries = Object.entries(pred.club_status_distribution || {})\n  .map(([k, v]) => `${k}: ${v}`)\n  .join(', ');\n\nconst prompt = `Tu es l assistant analytique de la plateforme H&M Retail Intelligence. Voici un resume du scoring client genere le ${pred.generated_at} sur ${pred.n_customers_scored} clients (table ${pred.source_table}) : statut club dominant : ${pred.dominant_club_status} (repartition : ${statusEntries}). Segment dominant (clustering) : ${pred.dominant_segment}. Depense totale predite : ${pred.predicted_spend_total} (moyenne par client : ${pred.predicted_spend_mean}, mediane : ${pred.predicted_spend_median}). Redige un message professionnel et concis de 4 a 5 phrases en francais a destination de l equipe marketing/CRM. Mentionne le statut club dominant, le segment dominant et la depense predite, puis donne 1 a 2 recommandations concretes (ex. ciblage d une campagne, relance d un segment a risque).`;\n\nreturn [{\n  json: {\n    prompt: prompt,\n    prediction: pred\n  }\n}];"
       },
-      "id": "f2ad0012-c906-4cee-a461-700f5f923304",
+      "id": "d4ae0dc6-bfe5-4bbd-9e4f-6d5c2b3bbc69",
       "name": "Préparer Prompt Ollama",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1120,
-        416
+        -1872,
+        480
       ]
     },
     {
@@ -122,95 +121,53 @@
           "numPredict": 300
         }
       },
-      "id": "b9049b9a-d66b-4bdc-8fae-2936d1b41d04",
+      "id": "5166038f-ef22-4b1e-b5da-919ad8ebd882",
       "name": "Ollama Model",
       "type": "@n8n/n8n-nodes-langchain.lmOllama",
       "typeVersion": 1,
       "position": [
-        1424,
-        640
-      ]
+        -1584,
+        608
+      ],
+      "credentials": {
+        "ollamaApi": {
+          "id": "fP5IKssPNzIVoYYN",
+          "name": "Ollama account"
+        }
+      }
     },
     {
       "parameters": {
         "promptType": "define",
         "text": "={{ $('Préparer Prompt Ollama').item.json.prompt }}"
       },
-      "id": "e134191b-0e9b-4c40-98b4-3e67d3da5354",
+      "id": "c7e65162-44a9-4b14-ae43-5e07a23b11c8",
       "name": "Basic LLM Chain",
       "type": "@n8n/n8n-nodes-langchain.chainLlm",
       "typeVersion": 1.4,
       "position": [
-        1344,
-        416
+        -1680,
+        480
       ]
     },
     {
       "parameters": {
         "jsCode": "// Formate le payload attendu par Django SSE (receive_daily_report) et par le\n// Dashboard.tsx (PredictionData interface) -- ce backend Django n'existe pas\n// dans ce depot (voir README.md section 2 'Ce qui n'est pas implemente') ; ce\n// noeud reste donc utile localement (payload pret a inspecter) mais l'appel\n// HTTP suivant ('Push SSE -> Django') echouera tant qu'aucun backend Django\n// n'est deploye a l'URL configuree.\nconst llmText = $input.first().json.text?.trim();\nconst pred = $('Préparer Prompt Ollama').first().json.prediction;\n\nconst payload = {\n  type: 'llm_report',\n  date: pred.generated_at,\n  generated_at: new Date().toISOString(),\n  message: llmText,\n  prediction: {\n    n_customers_scored: pred.n_customers_scored,\n    dominant_club_status: pred.dominant_club_status,\n    dominant_segment: pred.dominant_segment,\n    predicted_spend_total: pred.predicted_spend_total,\n    predicted_spend_mean: pred.predicted_spend_mean\n  }\n};\n\nreturn [{ json: payload }];"
       },
-      "id": "bb3b3dd5-4568-4d99-9705-76052f018aa3",
+      "id": "5cc6b7ef-2942-4886-a3fc-26137e350f72",
       "name": "Formater Payload SSE",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1696,
-        416
+        -1360,
+        480
       ],
       "notes": "Formate un résumé texte + agrégats issus de /predict/batch (voir 'Préparer Prompt Ollama')."
     },
     {
       "parameters": {
-        "jsCode": "// Appel HTTP via $http natif de N8N (fetch et http sont bloqués)\nconst llmText = $input.first().json.text?.trim();\nconst prediction = $('Préparer Prompt Ollama').first().json.prediction;\n\nlet chatAnswer = llmText;\n\ntry {\n  const response = await $http.request({\n    method: 'POST',\n    url: 'http://django_api:8000/api/chat/',\n    headers: { 'Content-Type': 'application/json' },\n    body: {\n      question: `Rapport quotidien automatique du ${prediction.date_prevision} : ${llmText}`\n    },\n    json: true\n  });\n  chatAnswer = response.answer || llmText;\n} catch (err) {\n  console.log('Django indisponible, fallback LLM : ' + err.message);\n}\n\nconst notification = {\n  id: Date.now(),\n  date: prediction.date_prevision,\n  generated_at: new Date().toISOString(),\n  visiteurs_prevus: prediction.visiteurs_prevus,\n  profil_dominant: prediction.profil_dominant,\n  niveau_affluence: prediction.niveau_affluence,\n  heure_pointe: `${prediction.heure_pointe_debut} - ${prediction.heure_pointe_fin}`,\n  message: chatAnswer,\n  model: 'llama3.2:3b-instruct-q4_K_M',\n  type: 'daily_report'\n};\n\nreturn [{ json: notification }];"
-      },
-      "id": "314f3d26-963a-456c-988b-5f91648791f5",
-      "name": "Envoyer au Chatbot",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        1920,
-        608
-      ],
-      "notes": "Envoie le message LLM au RAG Django → chatbot Ionic"
-    },
-    {
-      "parameters": {
         "method": "POST",
-        "url": "http://shopanalytics-django-api:8000/api/send-fcm/",
-        "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
-            {
-              "name": "Content-Type",
-              "value": "application/json"
-            }
-          ]
-        },
-        "sendBody": true,
-        "specifyBody": "=json",
-        "bodyParameters": {
-          "parameters": [
-            {}
-          ]
-        },
-        "jsonBody": "={{\n{\n  title: \"📊 Rapport Quotidien - \" + $json.date,\n  body: $json.message,\n  data: {\n    type: $json.type,\n    date: $json.date,\n    visiteurs_prevus: $json.prediction.visiteurs_prevus,\n    profil_dominant: $json.prediction.profil_dominant,\n    niveau_affluence: $json.prediction.niveau_affluence,\n    heure_pointe: $json.prediction.heure_pointe\n  }\n}\n}}",
-        "options": {
-          "timeout": 10000
-        }
-      },
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.4,
-      "position": [
-        1920,
-        416
-      ],
-      "id": "35fa189f-cb9f-42e6-801a-14f9b0a35427",
-      "name": "Envoyer FCM"
-    },
-    {
-      "parameters": {
-        "method": "POST",
-        "url": "http://shopanalytics-django-api:8000/api/daily-report/",
+        "url": "http://backend:8000/api/notifications",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
@@ -227,15 +184,15 @@
           "timeout": 10000
         }
       },
-      "id": "2b2e4937-3fe4-4bee-b495-3d22124253ce",
-      "name": "Push SSE → Django",
+      "id": "46d02cc6-d389-4401-8ec2-cf34d3c3715d",
+      "name": "Push notification → Backend",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        1920,
-        224
+        -1136,
+        480
       ],
-      "notes": "POST /api/daily-report/ → Django notifie tous les clients SSE connectés (Dashboard + ChatIA)"
+      "notes": "POST /api/notifications (notifications_router.py) → stocke la notification et la diffuse en SSE à tous les clients connectés (icône cloche du Dashboard). Remplace l'ancien appel vers shopanalytics-django-api (inexistant dans ce dépôt). Ajustez 'backend' dans l'URL par le nom du service Docker / host réel de votre API FastAPI."
     }
   ],
   "pinData": {},
@@ -321,17 +278,7 @@
       "main": [
         [
           {
-            "node": "Envoyer au Chatbot",
-            "type": "main",
-            "index": 0
-          },
-          {
-            "node": "Envoyer FCM",
-            "type": "main",
-            "index": 0
-          },
-          {
-            "node": "Push SSE → Django",
+            "node": "Push notification → Backend",
             "type": "main",
             "index": 0
           }
@@ -353,14 +300,14 @@
   "active": false,
   "settings": {
     "executionOrder": "v1",
-    "binaryMode": "separate",
-    "availableInMCP": false
+    "binaryMode": "separate"
   },
-  "versionId": "4d10b04a-f31f-40e7-b1ab-9855c4f25d51",
+  "versionId": "70afa855-f2f9-4f36-8969-89feeaf494fa",
   "meta": {
-    "instanceId": "f15849fb7803decc780e9ebdd4c4d1f48ec9ba90690a703e071c76884ae5f88c"
+    "templateCredsSetupCompleted": true,
+    "instanceId": "6afda35884f886b0e5f2d15046673ff0ccca7c391b65c7df78a21b579a4d9dd2"
   },
   "nodeGroups": [],
-  "id": "348d2599859545",
+  "id": "sAh34ZoWEFHNQVkX",
   "tags": []
 }
